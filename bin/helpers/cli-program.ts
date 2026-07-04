@@ -286,6 +286,31 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .default(DEFAULT.microphone)
         .hideHelp(),
     )
+    .addOption(
+      new Option(
+        '--show-toolbar',
+        'Show a compact in-page toolbar with Back/Forward/Reload/Home controls',
+      )
+        .default(DEFAULT.showToolbar)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--translate [language]',
+        'Enable the Translate action (Ctrl/Cmd+T) targeting the given language, default en',
+      )
+        .default(DEFAULT.translate)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--external-links <mode>',
+        "Where cross-origin links open: 'browser' (system default) or 'window' (new app window)",
+      )
+        .default(DEFAULT.externalLinks)
+        .choices(['browser', 'window'])
+        .hideHelp(),
+    )
     .version(packageJson.version, '-v, --version')
     .configureHelp({
       sortSubcommands: true,

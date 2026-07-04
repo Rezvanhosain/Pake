@@ -57,7 +57,12 @@ export function buildWindowConfigOverrides(
     min_width: options.minWidth,
     min_height: options.minHeight,
     ignore_certificate_errors: options.ignoreCertificateErrors,
-    new_window: options.newWindow,
+    // Opening external links as app windows rides on the popup (new_window)
+    // machinery, so that mode implies new_window.
+    new_window: options.newWindow || options.externalLinks === 'window',
+    show_toolbar: options.showToolbar,
+    translation_target: options.translate === true ? 'en' : options.translate,
+    external_links_in_window: options.externalLinks === 'window',
   };
 }
 

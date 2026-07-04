@@ -144,6 +144,16 @@ export interface PakeCliOptions {
 
   // Request microphone entitlement on macOS, default false
   microphone: boolean;
+
+  // Show the compact in-page navigation toolbar, default false
+  showToolbar: boolean;
+
+  // Target language for the Translate action (e.g. "en"); empty disables it.
+  // Commander yields `true` when --translate is passed without a value.
+  translate: string | true;
+
+  // Where external (cross-origin) links open: system 'browser' or a new app 'window'
+  externalLinks: 'browser' | 'window';
 }
 
 export interface PakeAppOptions extends PakeCliOptions {
@@ -183,6 +193,9 @@ export interface WindowConfig {
   min_height: number;
   ignore_certificate_errors: boolean;
   new_window: boolean;
+  show_toolbar: boolean;
+  translation_target: string;
+  external_links_in_window: boolean;
 }
 
 export interface PakeConfig {

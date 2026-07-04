@@ -57,4 +57,7 @@ export const DEFAULT_PAKE_OPTIONS: PakeCliOptions = {
   install: false,
   camera: false,
   microphone: false,
+  showToolbar: false,
+  translate: '',
+  externalLinks: 'browser',
 };

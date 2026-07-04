@@ -42,6 +42,10 @@ on:
         description: "Window height"
         required: false
         default: 780
+      extra_args:
+        description: "Extra pake-cli flags, e.g. --show-toolbar --translate en --external-links window"
+        required: false
+        default: ""
   workflow_call:
     inputs:
       name:
@@ -88,6 +92,11 @@ on:
         type: number
         required: false
         default: 780
+      extra_args:
+        description: "Extra pake-cli flags, e.g. --show-toolbar --translate en --external-links window"
+        type: string
+        required: false
+        default: ""
     secrets:
       PAKE_SIGNING_IDENTITY:
         required: false
@@ -221,6 +230,11 @@ jobs:
           ARGS+=("--width" "${{ inputs.width }}")
           ARGS+=("--height" "${{ inputs.height }}")
 
+          if [ -n "${{ inputs.extra_args }}" ]; then
+            read -ra EXTRA <<< "${{ inputs.extra_args }}"
+            ARGS+=("${EXTRA[@]}")
+          fi
+
           # Build once with multiple targets (faster than separate builds)
           node dist/cli.js "${ARGS[@]}" --targets deb,appimage
 
@@ -274,6 +288,11 @@ jobs:
 
           ARGS+=("--width" "${{ inputs.width }}")
           ARGS+=("--height" "${{ inputs.height }}")
+
+          if [ -n "${{ inputs.extra_args }}" ]; then
+            read -ra EXTRA <<< "${{ inputs.extra_args }}"
+            ARGS+=("${EXTRA[@]}")
+          fi
 
           node dist/cli.js "${ARGS[@]}" --targets universal --multi-arch
 
@@ -350,6 +369,11 @@ jobs:
 
           $args += "--width", "${{ inputs.width }}"
           $args += "--height", "${{ inputs.height }}"
+
+          $extraArgs = "${{ inputs.extra_args }}"
+          if ($extraArgs.Trim() -ne "") {
+            $args += $extraArgs -split '\s+'
+          }
 
           $args += "--targets", "x64"
 

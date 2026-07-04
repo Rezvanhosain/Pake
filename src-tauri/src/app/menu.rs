@@ -197,6 +197,21 @@ fn navigation_menu(app: &AppHandle<Wry>) -> tauri::Result<Submenu<Wry>> {
         true,
         Some("CmdOrCtrl+Shift+H"),
     )?)?;
+    navigation_menu.append(&PredefinedMenuItem::separator(app)?)?;
+    navigation_menu.append(&MenuItem::with_id(
+        app,
+        "open_in_browser",
+        "Open in Default Browser",
+        true,
+        Some("CmdOrCtrl+Shift+O"),
+    )?)?;
+    navigation_menu.append(&MenuItem::with_id(
+        app,
+        "translate_page",
+        "Translate Page",
+        true,
+        Some("CmdOrCtrl+Shift+T"),
+    )?)?;
     Ok(navigation_menu)
 }
 
@@ -277,6 +292,18 @@ pub fn handle_menu_click(app_handle: &AppHandle, id: &str) {
         "go_home" => {
             if let Some(window) = app_handle.get_webview_window("pake") {
                 let _ = window.eval("window.location.href = window.pakeConfig.url");
+            }
+        }
+        "open_in_browser" => {
+            if let Some(window) = app_handle.get_webview_window("pake") {
+                if let Ok(url) = window.url() {
+                    let _ = app_handle.opener().open_url(url.as_str(), None::<&str>);
+                }
+            }
+        }
+        "translate_page" => {
+            if let Some(window) = app_handle.get_webview_window("pake") {
+                let _ = window.eval("window.pakeTranslate && window.pakeTranslate()");
             }
         }
         "copy_url" => {

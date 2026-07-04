@@ -76,6 +76,46 @@ The download system automatically handles:
 - Blob URL downloads (dynamically generated files)
 - Context menu initiated downloads
 
+### Browser-Like Controls
+
+Pake apps ship a small set of browser controls without becoming a browser:
+
+**Keyboard shortcuts** (Ctrl on Windows/Linux, Cmd on macOS, unless `--disabled-web-shortcuts`):
+
+| Shortcut     | Action                                                          |
+| ------------ | --------------------------------------------------------------- |
+| `Ctrl/Cmd+[` | Back                                                            |
+| `Ctrl/Cmd+]` | Forward                                                         |
+| `Ctrl/Cmd+R` | Reload                                                          |
+| `Ctrl/Cmd+H` | Home (configured start URL; macOS: use `Cmd+Shift+H` menu item) |
+| `Ctrl/Cmd+L` | Copy current URL                                                |
+| `Ctrl/Cmd+T` | Translate page (only when `--translate` is set)                 |
+
+On macOS these also appear in the native menu bar (Navigation menu: Back, Forward, Go Home, Open in Default Browser, Translate Page). Windows and Linux have no native menu bar; use the shortcuts or the optional toolbar (`--show-toolbar`).
+
+**New-window behavior:**
+
+- Same-origin links and popups stay in the app. With `--new-window`, `window.open` popups (login/OAuth flows, video pop-outs) become real secondary app windows that share the app's session and cookies.
+- Cross-origin `target="_blank"` links open in the system browser by default; `--external-links window` opens them as app windows instead.
+- `--force-internal-navigation` and `--internal-url-regex` still override what counts as internal.
+
+**Example: a media/video site app**
+
+```shell
+pake https://www.youtube.com --name YouTube \
+  --new-window \
+  --show-toolbar \
+  --translate en \
+  --external-links window \
+  --width 1280 --height 800
+```
+
+This keeps playback and login popups inside the app (shared cookies across windows), adds Back/Forward/Home/Reload controls, and offers one-tap translation for non-English pages.
+
+The same options work from GitHub Actions: run the **Build Single Popular App** workflow (`single-app.yaml`) with `extra_args` set to e.g. `--show-toolbar --translate en --external-links window`.
+
+**Translation limitations:** the Translate action reloads the page through Google's `translate.goog` proxy. It requires network access to Google, does not work for pages behind a login, and is plain machine translation — no webview on any platform exposes a native translation API, so this is intentionally the lightest possible implementation.
+
 ## Container Communication
 
 Send messages between web content and Pake container.

@@ -559,7 +559,12 @@ function buildWindowConfigOverrides(options, platform = asSupportedPlatform(proc
         min_width: options.minWidth,
         min_height: options.minHeight,
         ignore_certificate_errors: options.ignoreCertificateErrors,
-        new_window: options.newWindow,
+        // Opening external links as app windows rides on the popup (new_window)
+        // machinery, so that mode implies new_window.
+        new_window: options.newWindow || options.externalLinks === 'window',
+        show_toolbar: options.showToolbar,
+        translation_target: options.translate === true ? 'en' : options.translate,
+        external_links_in_window: options.externalLinks === 'window',
     };
 }
 function asSupportedPlatform(platform) {
@@ -2776,6 +2781,9 @@ const DEFAULT_PAKE_OPTIONS = {
     install: false,
     camera: false,
     microphone: false,
+    showToolbar: false,
+    translate: '',
+    externalLinks: 'browser',
 };
 
 function validateNumberInput(value) {
@@ -2952,6 +2960,16 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .hideHelp())
         .addOption(new Option('--microphone', 'Request microphone permission on macOS')
         .default(DEFAULT_PAKE_OPTIONS.microphone)
+        .hideHelp())
+        .addOption(new Option('--show-toolbar', 'Show a compact in-page toolbar with Back/Forward/Reload/Home controls')
+        .default(DEFAULT_PAKE_OPTIONS.showToolbar)
+        .hideHelp())
+        .addOption(new Option('--translate [language]', 'Enable the Translate action (Ctrl/Cmd+T) targeting the given language, default en')
+        .default(DEFAULT_PAKE_OPTIONS.translate)
+        .hideHelp())
+        .addOption(new Option('--external-links <mode>', "Where cross-origin links open: 'browser' (system default) or 'window' (new app window)")
+        .default(DEFAULT_PAKE_OPTIONS.externalLinks)
+        .choices(['browser', 'window'])
         .hideHelp())
         .version(packageJson.version, '-v, --version')
         .configureHelp({

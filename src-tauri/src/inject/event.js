@@ -6,9 +6,38 @@ const shortcuts = {
   "+": () => zoomIn(),
   0: () => setZoom("100%"),
   r: () => window.location.reload(),
+  h: () => pakeGoHome(),
+  l: () => navigator.clipboard.writeText(window.location.href),
+  t: () => pakeTranslate(),
   ArrowUp: () => scrollTo(0, 0),
   ArrowDown: () => scrollTo(0, document.body.scrollHeight),
 };
+
+// Navigate back to the app's configured start URL.
+function pakeGoHome() {
+  const home = window.pakeConfig?.url;
+  if (home) {
+    window.location.href = home;
+  }
+}
+window.pakeGoHome = pakeGoHome;
+
+// Reload the current page through Google's translate.goog proxy. This is a
+// URL-rewrite fallback, not built-in webview translation (no system webview
+// exposes one); it covers most public sites but not pages behind logins,
+// because the proxy fetches the page from its own servers.
+function pakeTranslate() {
+  const target = window.pakeConfig?.translation_target;
+  if (!target) return;
+  const host = window.location.hostname;
+  if (host.endsWith(".translate.goog")) return;
+  const url = new URL(window.location.href);
+  url.hostname = `${host.replace(/-/g, "--").replace(/\./g, "-")}.translate.goog`;
+  url.searchParams.set("_x_tr_sl", "auto");
+  url.searchParams.set("_x_tr_tl", target);
+  window.location.href = url.href;
+}
+window.pakeTranslate = pakeTranslate;
 
 function setZoom(zoom) {
   // Use native WebView zoom (WKWebView pageZoom / WebView2 ZoomFactor) instead of
@@ -582,6 +611,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // Don't try to open blob: or data: URLs with shell
     if (isSpecialDownload(url)) {
       console.warn("Cannot open special URL with shell:", url);
+      return;
+    }
+
+    // Policy: keep external links inside the app as a new app window instead
+    // of the system browser. Requires popup support (new_window), which the
+    // CLI enables automatically for this mode; the unpatched window.open
+    // triggers the Rust on_new_window handler that builds the child window.
+    if (
+      pakeConfig.external_links_in_window === true &&
+      pakeConfig.new_window === true
+    ) {
+      originalWindowOpen.call(window, url, "_blank");
       return;
     }
 

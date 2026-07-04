@@ -33,6 +33,14 @@ Build Pake apps online without installing development tools locally.
 - **Subsequent runs**: ~5 minutes (uses cache)
 - Cache size: 400-600MB when complete
 
+### Extra Options
+
+The `extra_args` field accepts any additional [CLI flags](cli-usage.md). Example for a media/video site with browser-like controls and English translation:
+
+```
+--new-window --show-toolbar --translate en --external-links window
+```
+
 ## Tips
 
 - Be patient on first run - let cache build completely

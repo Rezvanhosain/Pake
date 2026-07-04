@@ -600,6 +600,33 @@ This can help sites that rely on popup auth windows, but it does not guarantee i
 --new-window
 ```
 
+#### [show-toolbar]
+
+Show a compact in-page toolbar with Back, Forward, Reload, Home, Copy URL, and Open in Browser controls (plus Translate when `--translate` is set). Hidden by default so packaged apps stay app-like. Note: sites with a `position: fixed` header pinned to the top may render underneath the bar.
+
+```shell
+--show-toolbar
+```
+
+#### [translate]
+
+Enable a "Translate Page" action (Ctrl/Cmd+T, plus a macOS menu item and a toolbar button when the toolbar is shown). Pass a language code or use `--translate` alone for English.
+
+This reloads the page through Google's `translate.goog` proxy — it is a URL-rewrite fallback, not built-in webview translation (no system webview exposes one). It works for public pages but not for pages behind a login, since the proxy fetches the page from Google's servers.
+
+```shell
+--translate          # defaults to en
+--translate ja
+```
+
+#### [external-links]
+
+Control where cross-origin links (`target="_blank"`, `window.open`, popups) open: `browser` (default — the system browser) or `window` (a new app window that shares the app's session/cookies). `window` mode implies `--new-window`.
+
+```shell
+--external-links window
+```
+
 ### Packaging Complete
 
 After completing the above steps, your application should be successfully packaged. Please note that the packaging process may take some time depending on your system configuration and network conditions. Be patient, and once the packaging is complete, you can find the application installer in the specified directory.

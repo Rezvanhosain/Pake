@@ -127,4 +127,41 @@ describe('buildWindowConfigOverrides', () => {
       internal_url_regex: '^https://example\\.com',
     });
   });
+
+  it('normalizes bare --translate to en and forwards explicit targets', () => {
+    expect(
+      buildWindowConfigOverrides(makeOptions({ translate: true }), 'win32')
+        .translation_target,
+    ).toBe('en');
+    expect(
+      buildWindowConfigOverrides(makeOptions({ translate: 'de' }), 'win32')
+        .translation_target,
+    ).toBe('de');
+    expect(
+      buildWindowConfigOverrides(makeOptions(), 'win32').translation_target,
+    ).toBe('');
+  });
+
+  it('external-links window mode implies new_window', () => {
+    const result = buildWindowConfigOverrides(
+      makeOptions({ externalLinks: 'window', newWindow: false }),
+      'win32',
+    );
+    expect(result.external_links_in_window).toBe(true);
+    expect(result.new_window).toBe(true);
+
+    const browserMode = buildWindowConfigOverrides(
+      makeOptions({ externalLinks: 'browser' }),
+      'win32',
+    );
+    expect(browserMode.external_links_in_window).toBe(false);
+    expect(browserMode.new_window).toBe(false);
+  });
+
+  it('forwards show_toolbar', () => {
+    expect(
+      buildWindowConfigOverrides(makeOptions({ showToolbar: true }), 'win32')
+        .show_toolbar,
+    ).toBe(true);
+  });
 });

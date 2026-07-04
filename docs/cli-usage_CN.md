@@ -598,6 +598,33 @@ pake ./my-app/index.html --name "my-app" --use-local-file
 --new-window
 ```
 
+#### [show-toolbar]
+
+显示一个紧凑的页面内工具栏，包含后退、前进、刷新、主页、复制链接和浏览器打开按钮（设置 `--translate` 时还会显示翻译按钮）。默认隐藏以保持应用外观。注意：顶部 `position: fixed` 的网站头部可能会被工具栏遮挡。
+
+```shell
+--show-toolbar
+```
+
+#### [translate]
+
+启用“翻译页面”操作（Ctrl/Cmd+T，macOS 还有菜单项，显示工具栏时有翻译按钮）。可传入语言代码，单独使用 `--translate` 默认翻译为英文。
+
+该功能通过 Google 的 `translate.goog` 代理重新加载页面——这是 URL 重写方案，并非 WebView 内置翻译（任何系统 WebView 都没有提供内置翻译 API）。适用于公开页面，但不适用于需要登录的页面，因为代理由 Google 服务器抓取页面内容。
+
+```shell
+--translate          # 默认 en
+--translate ja
+```
+
+#### [external-links]
+
+控制跨域链接（`target="_blank"`、`window.open`、弹窗）的打开位置：`browser`（默认——系统浏览器）或 `window`（新的应用窗口，与主窗口共享会话/Cookie）。`window` 模式会自动启用 `--new-window`。
+
+```shell
+--external-links window
+```
+
 ### 打包完成
 
 完成上述步骤后，您的应用程序应该已经成功打包。请注意，根据您的系统配置和网络状况，打包过程可能需要一些时间。请耐心等待，一旦打包完成，您就可以在指定的目录中找到应用程序安装包。
