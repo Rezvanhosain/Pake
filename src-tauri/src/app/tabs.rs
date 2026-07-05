@@ -236,14 +236,8 @@ fn emit_state(app: &AppHandle) {
         tabs: model.tabs.clone(),
         active: model.active.clone(),
     };
-    eprintln!(
-        "[Pake][tabs] emit tabs-state: {} tab(s), active={}",
-        payload.tabs.len(),
-        payload.active
-    );
-    match app.emit("tabs-state", payload) {
-        Ok(_) => {}
-        Err(e) => eprintln!("[Pake][tabs] emit ERROR: {e}"),
+    if let Err(e) = app.emit("tabs-state", payload) {
+        eprintln!("[Pake][tabs] emit ERROR: {e}");
     }
 }
 
@@ -279,12 +273,9 @@ fn spawn_tab(app: &AppHandle, url: String) -> tauri::Result<String> {
     )?;
 
     let (lw, lh) = window_logical_size(&window);
-    match window.add_child(builder, content_position(), content_size(lw, lh)) {
-        Ok(_) => eprintln!("[Pake][tabs] add_child ok label={label} size={lw}x{lh}"),
-        Err(e) => {
-            eprintln!("[Pake][tabs] add_child ERROR label={label}: {e}");
-            return Err(e);
-        }
+    if let Err(e) = window.add_child(builder, content_position(), content_size(lw, lh)) {
+        eprintln!("[Pake][tabs] add_child failed for {label}: {e}");
+        return Err(e);
     }
 
     {
@@ -385,7 +376,6 @@ pub fn setup_tabbed_window(
 
 #[tauri::command]
 pub fn tab_ready(app: AppHandle) {
-    eprintln!("[Pake][tabs] tab_ready invoked");
     emit_state(&app);
 }
 
@@ -400,10 +390,8 @@ pub async fn tab_new(app: AppHandle, url: Option<String>) {
             let state = app.state::<MultiWindowState>();
             home_url(&state.pake_config)
         });
-    eprintln!("[Pake][tabs] tab_new invoked url={target}");
-    match spawn_tab(&app, target) {
-        Ok(label) => eprintln!("[Pake][tabs] tab_new ok label={label}"),
-        Err(e) => eprintln!("[Pake][tabs] tab_new ERROR: {e}"),
+    if let Err(e) = spawn_tab(&app, target) {
+        eprintln!("[Pake][tabs] failed to open tab: {e}");
     }
 }
 
