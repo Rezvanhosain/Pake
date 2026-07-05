@@ -90,13 +90,20 @@ Pake apps ship a small set of browser controls without becoming a browser:
 | `Ctrl/Cmd+H` | Home (configured start URL; macOS: use `Cmd+Shift+H` menu item) |
 | `Ctrl/Cmd+L` | Copy current URL                                                |
 | `Ctrl/Cmd+T` | Translate page (only when `--translate` is set)                 |
+| `Ctrl/Cmd+N` | Open the current page in a new in-app window (needs `--new-window`) |
 
 On macOS these also appear in the native menu bar (Navigation menu: Back, Forward, Go Home, Open in Default Browser, Translate Page). Windows and Linux have no native menu bar; use the shortcuts or the optional toolbar (`--show-toolbar`).
 
-**New-window behavior:**
+**Optional toolbar (`--show-toolbar`):** a compact floating control cluster in the bottom-left corner (Back / Forward / Reload / Home / New Window / Copy URL / Open in Browser / Translate). It is a small floating pill, **not** a top bar: a full-width top bar would have to reserve vertical space, and no injected CSS can reserve it on sites with a `position: fixed` header (e.g. YouTube's masthead) without clipping that header or breaking the site's own scrolling. The floating cluster reserves no layout space, so the site's own header is never clipped.
 
-- Same-origin links and popups stay in the app. With `--new-window`, `window.open` popups (login/OAuth flows, video pop-outs) become real secondary app windows that share the app's session and cookies.
-- Cross-origin `target="_blank"` links open in the system browser by default; `--external-links window` opens them as app windows instead.
+**Multi-window / open-in-new-window** (all require `--new-window`, which is what turns popups into real secondary windows):
+
+- **`Ctrl/Cmd`-click or middle-click any link** → opens it in a new in-app window. This is how you keep several videos/pages open at once (e.g. middle-click several YouTube thumbnails).
+- **Toolbar "⊞" button / `Ctrl/Cmd+N`** → opens the *current* page in a new in-app window.
+- **`window.open` popups** (login/OAuth flows, video pop-outs) become real secondary app windows.
+- **Cross-origin `target="_blank"` links** open in the system browser by default; `--external-links window` opens them as app windows instead.
+- All in-app windows share the same session and cookies (same data directory), so logging in once applies across windows.
+- `--multi-window` additionally adds a system-tray / macOS-menu "New Window" item (opens the configured home URL).
 - `--force-internal-navigation` and `--internal-url-regex` still override what counts as internal.
 
 **Example: a media/video site app**
@@ -104,15 +111,17 @@ On macOS these also appear in the native menu bar (Navigation menu: Back, Forwar
 ```shell
 pake https://www.youtube.com --name YouTube \
   --new-window \
+  --multi-window \
   --show-toolbar \
   --translate en \
   --external-links window \
+  --adblock \
   --width 1280 --height 800
 ```
 
-This keeps playback and login popups inside the app (shared cookies across windows), adds Back/Forward/Home/Reload controls, and offers one-tap translation for non-English pages.
+This keeps playback and login popups inside the app (shared cookies across windows), lets you open multiple videos in separate windows (middle-click a thumbnail, or `Ctrl+N`), adds Back/Forward/Home/Reload/New-Window controls, and offers one-tap translation for non-English pages.
 
-The same options work from GitHub Actions: run the **Build Single Popular App** workflow (`single-app.yaml`) with `extra_args` set to e.g. `--show-toolbar --translate en --external-links window`.
+The same options work from GitHub Actions: run the **Build App With Pake CLI** workflow (`pake-cli.yaml`) with `extra_args` set to e.g. `--new-window --multi-window --show-toolbar --translate en --external-links window --adblock`.
 
 **Translation limitations:** the Translate action reloads the page through Google's `translate.goog` proxy. It requires network access to Google, does not work for pages behind a login, and is plain machine translation — no webview on any platform exposes a native translation API, so this is intentionally the lightest possible implementation.
 

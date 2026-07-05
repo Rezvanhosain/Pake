@@ -9,6 +9,9 @@ const shortcuts = {
   h: () => pakeGoHome(),
   l: () => navigator.clipboard.writeText(window.location.href),
   t: () => pakeTranslate(),
+  n: () =>
+    window.pakeOpenInNewWindow &&
+    window.pakeOpenInNewWindow(window.location.href),
   ArrowUp: () => scrollTo(0, 0),
   ArrowDown: () => scrollTo(0, document.body.scrollHeight),
 };
@@ -852,6 +855,38 @@ document.addEventListener("DOMContentLoaded", () => {
       return originalWindowOpen.call(window, url, name, specs);
     }
   };
+
+  // Open a URL in a new in-app window, reusing the native on_new_window handler
+  // (enabled by --new-window). Falls back to same-window navigation when popup
+  // windows are not enabled, so the control still does something useful.
+  function pakeOpenInNewWindow(url) {
+    if (!url) return;
+    if (window.pakeConfig?.new_window === true) {
+      originalWindowOpen.call(window, url, "_blank");
+    } else {
+      window.location.href = url;
+    }
+  }
+  window.pakeOpenInNewWindow = pakeOpenInNewWindow;
+
+  // Ctrl/Cmd-click and middle-click on a link open it in a new in-app window,
+  // matching the browser convention for "open in new tab/window". Runs in the
+  // capture phase so it wins over the site's own SPA click handling.
+  const openLinkInNewWindow = (e) => {
+    const isModifierClick =
+      e.type === "auxclick" ? e.button === 1 : e.ctrlKey || e.metaKey;
+    if (!isModifierClick) return;
+    if (!e.target || typeof e.target.closest !== "function") return;
+    const anchor = e.target.closest("a");
+    if (!anchor || !anchor.href) return;
+    const href = anchor.href;
+    if (!/^https?:/i.test(href)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    pakeOpenInNewWindow(href);
+  };
+  document.addEventListener("click", openLinkInNewWindow, true);
+  document.addEventListener("auxclick", openLinkInNewWindow, true);
 
   // Set the default zoom, There are problems with Loop without using try-catch.
   try {
