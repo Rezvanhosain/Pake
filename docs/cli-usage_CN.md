@@ -625,6 +625,15 @@ pake ./my-app/index.html --name "my-app" --use-local-file
 --external-links window
 ```
 
+#### [adblock]
+
+使用一份精选的域名列表拦截常见的广告/追踪请求（默认关闭）。这是轻量级的 JS 请求拦截，不是内容过滤引擎或完整的浏览器级拦截器。`--adblock-strict` 会在基础广告域名列表之上，额外拦截 Google Analytics、GTM、Facebook Pixel、Hotjar 等分析/追踪像素域名。
+
+```shell
+--adblock
+--adblock-strict
+```
+
 ### 打包完成
 
 完成上述步骤后，您的应用程序应该已经成功打包。请注意，根据您的系统配置和网络状况，打包过程可能需要一些时间。请耐心等待，一旦打包完成，您就可以在指定的目录中找到应用程序安装包。

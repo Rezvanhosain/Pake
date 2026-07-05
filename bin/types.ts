@@ -154,6 +154,12 @@ export interface PakeCliOptions {
 
   // Where external (cross-origin) links open: system 'browser' or a new app 'window'
   externalLinks: 'browser' | 'window';
+
+  // Lightweight ad/tracker request blocking (curated hostname list, off by default)
+  adblock: boolean;
+
+  // Adds analytics/tracking-pixel hosts on top of the basic ad-serving list
+  adblockStrict: boolean;
 }
 
 export interface PakeAppOptions extends PakeCliOptions {
@@ -196,6 +202,7 @@ export interface WindowConfig {
   show_toolbar: boolean;
   translation_target: string;
   external_links_in_window: boolean;
+  adblock_mode: string;
 }
 
 export interface PakeConfig {

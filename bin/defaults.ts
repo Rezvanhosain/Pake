@@ -60,4 +60,6 @@ export const DEFAULT_PAKE_OPTIONS: PakeCliOptions = {
   showToolbar: false,
   translate: '',
   externalLinks: 'browser',
+  adblock: false,
+  adblockStrict: false,
 };

@@ -72,6 +72,15 @@ document.addEventListener("DOMContentLoaded", () => {
       () => window.pakeTranslate && window.pakeTranslate(),
     );
   }
+  const adblockMode = window.pakeConfig?.adblock_mode;
+  if (adblockMode === "basic" || adblockMode === "strict") {
+    addSeparator();
+    const badge = document.createElement("span");
+    badge.textContent = "🛡";
+    badge.title = `Ad blocking: ${adblockMode}`;
+    badge.style.cssText = "padding: 0 4px; font-size: 13px;";
+    bar.appendChild(badge);
+  }
 
   document.body.appendChild(bar);
   // Push the page below the bar. Sites with position:fixed headers pinned to

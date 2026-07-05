@@ -565,6 +565,7 @@ function buildWindowConfigOverrides(options, platform = asSupportedPlatform(proc
         show_toolbar: options.showToolbar,
         translation_target: options.translate === true ? 'en' : options.translate,
         external_links_in_window: options.externalLinks === 'window',
+        adblock_mode: options.adblockStrict ? 'strict' : options.adblock ? 'basic' : '',
     };
 }
 function asSupportedPlatform(platform) {
@@ -2784,6 +2785,8 @@ const DEFAULT_PAKE_OPTIONS = {
     showToolbar: false,
     translate: '',
     externalLinks: 'browser',
+    adblock: false,
+    adblockStrict: false,
 };
 
 function validateNumberInput(value) {
@@ -2970,6 +2973,12 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .addOption(new Option('--external-links <mode>', "Where cross-origin links open: 'browser' (system default) or 'window' (new app window)")
         .default(DEFAULT_PAKE_OPTIONS.externalLinks)
         .choices(['browser', 'window'])
+        .hideHelp())
+        .addOption(new Option('--adblock', 'Block common ad/tracker requests with a small curated hostname list')
+        .default(DEFAULT_PAKE_OPTIONS.adblock)
+        .hideHelp())
+        .addOption(new Option('--adblock-strict', 'Like --adblock, also blocking common analytics/tracking-pixel hosts')
+        .default(DEFAULT_PAKE_OPTIONS.adblockStrict)
         .hideHelp())
         .version(packageJson.version, '-v, --version')
         .configureHelp({

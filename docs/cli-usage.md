@@ -627,6 +627,15 @@ Control where cross-origin links (`target="_blank"`, `window.open`, popups) open
 --external-links window
 ```
 
+#### [adblock]
+
+Block common ad/tracker requests using a small curated hostname list (off by default). This is lightweight JS-level request blocking, not a cosmetic filter engine or full extension-style blocker. `--adblock-strict` adds analytics/tracking-pixel hosts (Google Analytics, GTM, Facebook Pixel, Hotjar, etc.) on top of the basic ad-serving list.
+
+```shell
+--adblock
+--adblock-strict
+```
+
 ### Packaging Complete
 
 After completing the above steps, your application should be successfully packaged. Please note that the packaging process may take some time depending on your system configuration and network conditions. Be patient, and once the packaging is complete, you can find the application installer in the specified directory.

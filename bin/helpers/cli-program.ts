@@ -311,6 +311,22 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .choices(['browser', 'window'])
         .hideHelp(),
     )
+    .addOption(
+      new Option(
+        '--adblock',
+        'Block common ad/tracker requests with a small curated hostname list',
+      )
+        .default(DEFAULT.adblock)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--adblock-strict',
+        'Like --adblock, also blocking common analytics/tracking-pixel hosts',
+      )
+        .default(DEFAULT.adblockStrict)
+        .hideHelp(),
+    )
     .version(packageJson.version, '-v, --version')
     .configureHelp({
       sortSubcommands: true,

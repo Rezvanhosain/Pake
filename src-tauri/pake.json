@@ -24,7 +24,8 @@
       "new_window": false,
       "show_toolbar": false,
       "translation_target": "",
-      "external_links_in_window": false
+      "external_links_in_window": false,
+      "adblock_mode": ""
     }
   ],
   "user_agent": {

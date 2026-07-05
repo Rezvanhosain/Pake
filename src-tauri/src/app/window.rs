@@ -301,6 +301,7 @@ fn build_window(
     }
 
     window_builder = window_builder
+        .initialization_script(include_str!("../inject/adblock.js"))
         .initialization_script(include_str!("../inject/toast.js"))
         .initialization_script(include_str!("../inject/fullscreen.js"))
         .initialization_script(include_str!("../inject/event.js"))

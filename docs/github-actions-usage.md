@@ -38,7 +38,7 @@ Build Pake apps online without installing development tools locally.
 The `extra_args` field accepts any additional [CLI flags](cli-usage.md). Example for a media/video site with browser-like controls and English translation:
 
 ```
---new-window --show-toolbar --translate en --external-links window
+--new-window --show-toolbar --translate en --external-links window --adblock
 ```
 
 ## Tips

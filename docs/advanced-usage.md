@@ -116,6 +116,19 @@ The same options work from GitHub Actions: run the **Build Single Popular App** 
 
 **Translation limitations:** the Translate action reloads the page through Google's `translate.goog` proxy. It requires network access to Google, does not work for pages behind a login, and is plain machine translation — no webview on any platform exposes a native translation API, so this is intentionally the lightest possible implementation.
 
+### Lightweight Ad Blocking
+
+`--adblock` (and the stricter `--adblock-strict`) block a small curated list of ad/tracker hostnames by patching `fetch`, `XMLHttpRequest`, and `<script>`/`<img>`/`<iframe>` element `src` assignment inside the page — no native request-interception API, custom protocol, or filter-list engine involved. Off by default.
+
+```shell
+pake https://example.com --name Example --adblock
+pake https://example.com --name Example --adblock-strict
+```
+
+- **What it does:** drops requests to ~15 well-known ad-serving domains (`doubleclick.net`, `googlesyndication.com`, `taboola.com`, etc.) in basic mode; strict mode adds ~9 analytics/tracking-pixel hosts (Google Analytics, Google Tag Manager, Facebook Pixel, Hotjar, and similar).
+- **What it does not do:** no cosmetic filtering (it will not hide ad containers/DOM elements left behind after a blocked request), no user-editable filter lists, no EasyList-style rule engine, no per-site toggle UI. When `--show-toolbar` is on, a small 🛡 badge indicates blocking is active.
+- **Known limitations:** sites that rely on Google Tag Manager for non-ad functionality (rare, but it happens) can lose that functionality in strict mode — use basic mode if a site misbehaves. The hostname list is static and requires a rebuild to update.
+
 ## Container Communication
 
 Send messages between web content and Pake container.
