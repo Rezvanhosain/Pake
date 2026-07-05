@@ -636,6 +636,34 @@ Block common ad/tracker requests using a small curated hostname list (off by def
 --adblock-strict
 ```
 
+#### [tabs]
+
+Open multiple pages in the same app window using a browser-style tab bar (Windows-first, off by default). When enabled, the app shell hosts a lightweight tab strip above the content area. Each tab is an independent webview that shares the same session and cookies.
+
+**Tab interactions:**
+- **New tab**: click the `+` button in the tab bar, or press `Ctrl+T`
+- **Switch tab**: click any tab tile
+- **Close tab**: click `✕` on a tab tile, or middle-click the tile
+- **Open link in new tab**: right-click a link → "Open link in new tab"; or middle-click a link; or Ctrl+click a link
+
+```shell
+--tabs
+```
+
+**Example:**
+
+```shell
+pake https://youtube.com --name "YouTube" --tabs
+```
+
+**How it works (5 lines):**
+
+1. One native Tauri window (`src-tauri/src/app/tabs.rs`) hosts a `paketabs://` tab-strip webview pinned to the top 44 px.
+2. Each tab is a content webview added via the `unstable` `Window::add_child` API; only the active one is shown.
+3. All content webviews share one data directory → shared cookies/session across tabs and restarts.
+4. Rust owns the tab list and pushes it to the strip via the `tabs-state` event; strip/pages call back with async `tab_new`/`tab_switch`/`tab_close`/`tab_report` commands.
+5. The strip is a separate webview (not DOM-injected chrome), so it never clips sites that use `position:fixed` mastheads (e.g. YouTube).
+
 ### Packaging Complete
 
 After completing the above steps, your application should be successfully packaged. Please note that the packaging process may take some time depending on your system configuration and network conditions. Be patient, and once the packaging is complete, you can find the application installer in the specified directory.
