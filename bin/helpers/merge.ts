@@ -17,7 +17,7 @@ import {
   WindowConfig,
 } from '@/types';
 import { tauriConfigDirectory, npmDirectory } from '@/utils/dir';
-import { LINUX_TARGET_TYPES } from '@/utils/targets';
+import { LINUX_TARGET_TYPES, resolveLinuxBundleTargets } from '@/utils/targets';
 
 /**
  * Pure transform from CLI options to the window-config slice that gets
@@ -31,13 +31,15 @@ export function buildWindowConfigOverrides(
   platform: SupportedPlatform = asSupportedPlatform(process.platform),
 ): Partial<WindowConfig> {
   const platformHideOnClose = options.hideOnClose ?? platform === 'darwin';
+  const platformHideTitleBar =
+    platform === 'darwin' ? options.hideTitleBar : false;
   return {
     width: options.width,
     height: options.height,
     fullscreen: options.fullscreen,
     maximize: options.maximize,
     resizable: options.resizable ?? true,
-    hide_title_bar: options.hideTitleBar,
+    hide_title_bar: platformHideTitleBar,
     activation_shortcut: options.activationShortcut,
     always_on_top: options.alwaysOnTop,
     dark_mode: options.darkMode,
@@ -55,7 +57,14 @@ export function buildWindowConfigOverrides(
     min_width: options.minWidth,
     min_height: options.minHeight,
     ignore_certificate_errors: options.ignoreCertificateErrors,
-    new_window: options.newWindow,
+    // Opening external links as app windows rides on the popup (new_window)
+    // machinery, so that mode implies new_window.
+    new_window: options.newWindow || options.externalLinks === 'window',
+    show_toolbar: options.showToolbar,
+    translation_target: options.translate === true ? 'en' : options.translate,
+    external_links_in_window: options.externalLinks === 'window',
+    adblock_mode: options.adblockStrict ? 'strict' : options.adblock ? 'basic' : '',
+    tabs: options.tabs,
   };
 }
 
@@ -137,6 +146,28 @@ async function handleLocalFile(
   }
 }
 
+export function buildLinuxDesktopContent(
+  name: string,
+  title: string | undefined,
+  linuxBinaryName: string,
+): string {
+  const chineseName = title && /[\u4e00-\u9fa5]/.test(title) ? title : null;
+
+  return `[Desktop Entry]
+Version=1.0
+Type=Application
+Name=${name}
+${chineseName ? `Name[zh_CN]=${chineseName}` : ''}
+Comment=${name}
+Exec=${linuxBinaryName}
+Icon=${linuxBinaryName}
+Categories=Network;WebBrowser;Utility;
+MimeType=text/html;text/xml;application/xhtml_xml;
+StartupNotify=true
+Terminal=false
+`;
+}
+
 async function mergeLinuxConfig(
   options: PakeAppOptions,
   name: string,
@@ -153,23 +184,11 @@ async function mergeLinuxConfig(
 
   const linuxName = generateLinuxPackageName(name);
   const desktopFileName = `com.pake.${linuxName}.desktop`;
-  const iconName = `${linuxName}_512`;
-  const { title } = options;
-
-  const chineseName = title && /[\u4e00-\u9fa5]/.test(title) ? title : null;
-  const desktopContent = `[Desktop Entry]
-Version=1.0
-Type=Application
-Name=${name}
-${chineseName ? `Name[zh_CN]=${chineseName}` : ''}
-Comment=${name}
-Exec=${linuxBinaryName}
-Icon=${iconName}
-Categories=Network;WebBrowser;Utility;
-MimeType=text/html;text/xml;application/xhtml_xml;
-StartupNotify=true
-Terminal=false
-`;
+  const desktopContent = buildLinuxDesktopContent(
+    name,
+    options.title,
+    linuxBinaryName,
+  );
 
   const srcAssetsDir = path.join(npmDirectory, 'src-tauri/assets');
   const srcDesktopFilePath = path.join(srcAssetsDir, desktopFileName);
@@ -188,21 +207,60 @@ Terminal=false
     [desktopInstallPath]: `assets/${desktopFileName}`,
   };
 
-  const validTargets = [
-    ...LINUX_TARGET_TYPES,
-    ...LINUX_TARGET_TYPES.map((target) => `${target}-arm64`),
-  ];
-  const baseTarget = options.targets.includes('-arm64')
-    ? options.targets.replace('-arm64', '')
-    : options.targets;
+  // options.targets reaches here already stripped of any -arm64 suffix by the
+  // LinuxBuilder constructor, and may carry several comma-separated formats
+  // (e.g. the distro-aware default "deb,appimage"). Validate the parsed list
+  // rather than string-matching the whole value, so a valid multi-target
+  // default no longer trips the "must be one of ..." warning on every build.
+  const { bundleTargets, hasValidTarget } = resolveLinuxBundleTargets(
+    options.targets,
+  );
 
-  if (validTargets.includes(options.targets)) {
-    // zst is repacked from the deb payload, so Tauri itself bundles a deb.
-    tauriConf.bundle.targets = [baseTarget === 'zst' ? 'deb' : baseTarget];
+  if (hasValidTarget) {
+    tauriConf.bundle.targets = bundleTargets;
   } else {
     logger.warn(
-      `✼ The target must be one of ${validTargets.join(', ')}, the default 'deb' will be used.`,
+      `✼ The target must be one of ${LINUX_TARGET_TYPES.join(', ')}, the default 'deb' will be used.`,
     );
+  }
+}
+
+export async function resolveSystemTrayIconPath(
+  systemTrayIcon: string,
+  defaultTrayIconPath: string,
+  safeAppName: string,
+  iconOutputDir = path.join(npmDirectory, 'src-tauri/png'),
+): Promise<string> {
+  if (systemTrayIcon.length === 0) {
+    return defaultTrayIconPath;
+  }
+
+  try {
+    const iconExt = path.extname(systemTrayIcon).toLowerCase();
+    if (iconExt !== '.png' && iconExt !== '.ico') {
+      logger.warn(
+        `✼ System tray icon must be .ico or .png, but you provided ${iconExt}.`,
+      );
+      logger.warn(`✼ Default system tray icon will be used.`);
+      return defaultTrayIconPath;
+    }
+
+    if (!(await fsExtra.pathExists(systemTrayIcon))) {
+      logger.warn(`✼ System tray icon "${systemTrayIcon}" was not found.`);
+      logger.warn(`✼ Default system tray icon will be used.`);
+      return defaultTrayIconPath;
+    }
+
+    const trayIconPath = `png/${safeAppName}${iconExt}`;
+    const trayIcoPath = path.join(iconOutputDir, `${safeAppName}${iconExt}`);
+    await fsExtra.copy(systemTrayIcon, trayIcoPath);
+    return trayIconPath;
+  } catch (err) {
+    logger.warn(
+      `✼ Failed to apply system tray icon "${systemTrayIcon}": ${err instanceof Error ? err.message : String(err)}`,
+    );
+    logger.warn(`✼ Default system tray icon will remain unchanged.`);
+    return defaultTrayIconPath;
   }
 }
 
@@ -283,32 +341,13 @@ async function mergeIcons(
   }
 
   // Set tray icon path.
-  let trayIconPath =
+  const defaultTrayIconPath =
     platform === 'darwin' ? 'png/icon_512.png' : tauriConf.bundle.icon![0];
-  if (options.systemTrayIcon.length > 0) {
-    try {
-      await fsExtra.pathExists(options.systemTrayIcon);
-      const iconExt = path.extname(options.systemTrayIcon).toLowerCase();
-      if (iconExt === '.png' || iconExt === '.ico') {
-        const trayIcoPath = path.join(
-          npmDirectory,
-          `src-tauri/png/${safeAppName}${iconExt}`,
-        );
-        trayIconPath = `png/${safeAppName}${iconExt}`;
-        await fsExtra.copy(options.systemTrayIcon, trayIcoPath);
-      } else {
-        logger.warn(
-          `✼ System tray icon must be .ico or .png, but you provided ${iconExt}.`,
-        );
-        logger.warn(`✼ Default system tray icon will be used.`);
-      }
-    } catch (err) {
-      logger.warn(
-        `✼ Failed to apply system tray icon "${options.systemTrayIcon}": ${err instanceof Error ? err.message : String(err)}`,
-      );
-      logger.warn(`✼ Default system tray icon will remain unchanged.`);
-    }
-  }
+  const trayIconPath = await resolveSystemTrayIconPath(
+    options.systemTrayIcon,
+    defaultTrayIconPath,
+    safeAppName,
+  );
 
   tauriConf.pake.system_tray_path = trayIconPath;
   delete tauriConf.app.trayIcon;
@@ -439,6 +478,11 @@ export async function mergeConfig(
   } = options;
 
   const platform = asSupportedPlatform(process.platform);
+  if (options.hideTitleBar && platform !== 'darwin') {
+    logger.warn(
+      '✼ --hide-title-bar is only supported on macOS and will be ignored on this platform.',
+    );
+  }
   const tauriConfWindowOptions = buildWindowConfigOverrides(options, platform);
   Object.assign(tauriConf.pake.windows[0], { url, ...tauriConfWindowOptions });
 

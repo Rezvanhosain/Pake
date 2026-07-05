@@ -58,6 +58,27 @@ describe('buildWindowConfigOverrides', () => {
     ).toBe(false);
   });
 
+  it('only forwards hideTitleBar on macOS', () => {
+    expect(
+      buildWindowConfigOverrides(
+        { ...makeOptions(), hideTitleBar: true },
+        'darwin',
+      ).hide_title_bar,
+    ).toBe(true);
+    expect(
+      buildWindowConfigOverrides(
+        { ...makeOptions(), hideTitleBar: true },
+        'linux',
+      ).hide_title_bar,
+    ).toBe(false);
+    expect(
+      buildWindowConfigOverrides(
+        { ...makeOptions(), hideTitleBar: true },
+        'win32',
+      ).hide_title_bar,
+    ).toBe(false);
+  });
+
   it('only enables start_to_tray when both flag and tray are on', () => {
     expect(
       buildWindowConfigOverrides(
@@ -105,5 +126,64 @@ describe('buildWindowConfigOverrides', () => {
       force_internal_navigation: true,
       internal_url_regex: '^https://example\\.com',
     });
+  });
+
+  it('normalizes bare --translate to en and forwards explicit targets', () => {
+    expect(
+      buildWindowConfigOverrides(makeOptions({ translate: true }), 'win32')
+        .translation_target,
+    ).toBe('en');
+    expect(
+      buildWindowConfigOverrides(makeOptions({ translate: 'de' }), 'win32')
+        .translation_target,
+    ).toBe('de');
+    expect(
+      buildWindowConfigOverrides(makeOptions(), 'win32').translation_target,
+    ).toBe('');
+  });
+
+  it('external-links window mode implies new_window', () => {
+    const result = buildWindowConfigOverrides(
+      makeOptions({ externalLinks: 'window', newWindow: false }),
+      'win32',
+    );
+    expect(result.external_links_in_window).toBe(true);
+    expect(result.new_window).toBe(true);
+
+    const browserMode = buildWindowConfigOverrides(
+      makeOptions({ externalLinks: 'browser' }),
+      'win32',
+    );
+    expect(browserMode.external_links_in_window).toBe(false);
+    expect(browserMode.new_window).toBe(false);
+  });
+
+  it('forwards show_toolbar', () => {
+    expect(
+      buildWindowConfigOverrides(makeOptions({ showToolbar: true }), 'win32')
+        .show_toolbar,
+    ).toBe(true);
+  });
+
+  it('derives adblock_mode from adblock/adblockStrict flags', () => {
+    expect(buildWindowConfigOverrides(makeOptions(), 'win32').adblock_mode).toBe(
+      '',
+    );
+    expect(
+      buildWindowConfigOverrides(makeOptions({ adblock: true }), 'win32')
+        .adblock_mode,
+    ).toBe('basic');
+    expect(
+      buildWindowConfigOverrides(
+        makeOptions({ adblock: false, adblockStrict: true }),
+        'win32',
+      ).adblock_mode,
+    ).toBe('strict');
+    expect(
+      buildWindowConfigOverrides(
+        makeOptions({ adblock: true, adblockStrict: true }),
+        'win32',
+      ).adblock_mode,
+    ).toBe('strict');
   });
 });

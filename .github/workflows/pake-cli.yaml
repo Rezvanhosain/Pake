@@ -62,6 +62,10 @@ on:
         description: "Package formats (comma-separated: deb,appimage,rpm,zst)"
         required: false
         default: "deb"
+      extra_args:
+        description: "Extra pake-cli flags, e.g. --show-toolbar --translate en --external-links window --new-window"
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -150,6 +154,11 @@ jobs:
             ARGS+=("--targets" "${{ inputs.targets }}")
           fi
 
+          if [ -n "${{ inputs.extra_args }}" ]; then
+            read -ra EXTRA <<< "${{ inputs.extra_args }}"
+            ARGS+=("${EXTRA[@]}")
+          fi
+
           echo "Running: node dist/cli.js ${ARGS[@]}"
           node dist/cli.js "${ARGS[@]}"
 
@@ -190,6 +199,11 @@ jobs:
 
           if ("${{ inputs.hide_title_bar }}" -eq "true") {
             $args += "--hide-title-bar"
+          }
+
+          $extraArgs = "${{ inputs.extra_args }}"
+          if ($extraArgs.Trim() -ne "") {
+            $args += $extraArgs -split '\s+'
           }
 
           Write-Host "Running: node dist/cli.js $($args -join ' ')"

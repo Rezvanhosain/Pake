@@ -10,17 +10,17 @@ import os from 'os';
 import { execa, execaSync } from 'execa';
 import crypto from 'crypto';
 import ora from 'ora';
-import fs from 'fs/promises';
+import fs from 'fs';
+import fs$1 from 'fs/promises';
 import { dir } from 'tmp-promise';
 import { fileTypeFromBuffer } from 'file-type';
 import icongen from 'icon-gen';
 import sharp from 'sharp';
 import * as psl from 'psl';
 import { InvalidArgumentError, program as program$1, Option } from 'commander';
-import fs$1 from 'fs';
 
 var name = "pake-cli";
-var version = "3.11.10";
+var version = "3.13.1";
 var description = "🤱🏻 Turn any webpage into a desktop app with one command. 🤱🏻 一键打包网页生成轻量桌面应用。";
 var engines = {
 	node: ">=18.0.0"
@@ -230,6 +230,93 @@ const { platform: platform$1 } = process;
 const IS_MAC = platform$1 === 'darwin';
 const IS_WIN = platform$1 === 'win32';
 const IS_LINUX = platform$1 === 'linux';
+// Distro IDs / ID_LIKE families that ship an RPM-based package manager.
+const RPM_FAMILY_IDS = new Set([
+    'rhel',
+    'fedora',
+    'centos',
+    'rocky',
+    'almalinux',
+    'ol', // Oracle Linux
+    'oracle',
+    'amzn', // Amazon Linux
+    'mariner',
+    'azurelinux',
+    'suse',
+    'opensuse',
+    'opensuse-leap',
+    'opensuse-tumbleweed',
+    'sles',
+]);
+// Distro IDs / ID_LIKE families that ship a DEB-based package manager.
+const DEB_FAMILY_IDS = new Set([
+    'debian',
+    'ubuntu',
+    'linuxmint',
+    'pop',
+    'elementary',
+    'kali',
+    'raspbian',
+    'devuan',
+]);
+// Parse the shell-style key=value pairs of an /etc/os-release file, stripping
+// the optional surrounding quotes around values.
+function parseOsRelease(content) {
+    const fields = {};
+    for (const rawLine of content.split('\n')) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#'))
+            continue;
+        const separator = line.indexOf('=');
+        if (separator === -1)
+            continue;
+        const key = line.slice(0, separator).trim();
+        let value = line.slice(separator + 1).trim();
+        if (value.length >= 2 &&
+            ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.slice(1, -1);
+        }
+        if (key)
+            fields[key] = value;
+    }
+    return fields;
+}
+// Detect the package family from /etc/os-release. The distro's own ID wins over
+// ID_LIKE hints, and an unknown distro falls back to 'deb' to preserve Pake's
+// historical default. Accepts content directly so the decision is unit-testable
+// without a real /etc/os-release.
+function detectLinuxPackageFamily(osReleaseContent) {
+    let content = osReleaseContent;
+    if (content === undefined) {
+        try {
+            content = fs.readFileSync('/etc/os-release', 'utf-8');
+        }
+        catch {
+            return 'deb';
+        }
+    }
+    const fields = parseOsRelease(content);
+    const id = (fields.ID ?? '').toLowerCase().trim();
+    const idLike = (fields.ID_LIKE ?? '')
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+    for (const token of [id, ...idLike]) {
+        if (DEB_FAMILY_IDS.has(token))
+            return 'deb';
+        if (RPM_FAMILY_IDS.has(token))
+            return 'rpm';
+    }
+    return 'deb';
+}
+// Default Linux bundle targets, chosen by the host distro's package family so
+// RPM-based distros (Fedora/RHEL/Oracle/Rocky/Alma/openSUSE) get a native .rpm
+// instead of a .deb their package manager cannot install. AppImage stays as a
+// universal fallback in both cases.
+function getDefaultLinuxTargets() {
+    return detectLinuxPackageFamily() === 'rpm' ? 'rpm,appimage' : 'deb,appimage';
+}
 
 async function shellExec(command, timeout = 300000, env) {
     try {
@@ -339,7 +426,7 @@ function checkRustInstalled() {
 async function combineFiles(files, output) {
     const contents = await Promise.all(files.map(async (file) => {
         if (file.endsWith('.css')) {
-            const fileContent = await fs.readFile(file, 'utf-8');
+            const fileContent = await fs$1.readFile(file, 'utf-8');
             return `window.addEventListener('DOMContentLoaded', (_event) => {
         const css = ${JSON.stringify(fileContent)};
         const style = document.createElement('style');
@@ -347,12 +434,16 @@ async function combineFiles(files, output) {
         document.head.appendChild(style);
       });`;
         }
-        const fileContent = await fs.readFile(file);
-        return ("window.addEventListener('DOMContentLoaded', (_event) => { " +
+        const fileContent = await fs$1.readFile(file);
+        // Keep the closing `});` on its own line. If the injected file ends in a
+        // line comment without a trailing newline, appending ` });` on the same
+        // line would comment it out and break the wrapper (mirrors the .css
+        // branch above, which already closes on a separate line).
+        return ("window.addEventListener('DOMContentLoaded', (_event) => {\n" +
             fileContent +
-            ' });');
+            '\n});');
     }));
-    await fs.writeFile(output, contents.join('\n'));
+    await fs$1.writeFile(output, contents.join('\n'));
     return files;
 }
 
@@ -421,6 +512,18 @@ function filterLinuxTargets(targets) {
 function needsTemporaryDebForZst(targets) {
     return targets.includes('zst') && !targets.includes('deb');
 }
+// Resolves the Tauri `bundle.targets` list for a Linux build from a
+// comma-separated --targets string (e.g. the distro-aware default
+// "deb,appimage"). zst is repacked from the deb payload, so it maps to a deb
+// bundle. hasValidTarget is false only when no known target is present, which
+// is the single case that should warn and fall back to the default.
+function resolveLinuxBundleTargets(targets) {
+    const requested = filterLinuxTargets(targets);
+    const bundleTargets = [
+        ...new Set(requested.map((target) => (target === 'zst' ? 'deb' : target))),
+    ];
+    return { bundleTargets, hasValidTarget: requested.length > 0 };
+}
 
 /**
  * Pure transform from CLI options to the window-config slice that gets
@@ -431,13 +534,14 @@ function needsTemporaryDebForZst(targets) {
  */
 function buildWindowConfigOverrides(options, platform = asSupportedPlatform(process.platform)) {
     const platformHideOnClose = options.hideOnClose ?? platform === 'darwin';
+    const platformHideTitleBar = platform === 'darwin' ? options.hideTitleBar : false;
     return {
         width: options.width,
         height: options.height,
         fullscreen: options.fullscreen,
         maximize: options.maximize,
         resizable: options.resizable ?? true,
-        hide_title_bar: options.hideTitleBar,
+        hide_title_bar: platformHideTitleBar,
         activation_shortcut: options.activationShortcut,
         always_on_top: options.alwaysOnTop,
         dark_mode: options.darkMode,
@@ -455,7 +559,14 @@ function buildWindowConfigOverrides(options, platform = asSupportedPlatform(proc
         min_width: options.minWidth,
         min_height: options.minHeight,
         ignore_certificate_errors: options.ignoreCertificateErrors,
-        new_window: options.newWindow,
+        // Opening external links as app windows rides on the popup (new_window)
+        // machinery, so that mode implies new_window.
+        new_window: options.newWindow || options.externalLinks === 'window',
+        show_toolbar: options.showToolbar,
+        translation_target: options.translate === true ? 'en' : options.translate,
+        external_links_in_window: options.externalLinks === 'window',
+        adblock_mode: options.adblockStrict ? 'strict' : options.adblock ? 'basic' : '',
+        tabs: options.tabs,
     };
 }
 function asSupportedPlatform(platform) {
@@ -508,6 +619,22 @@ async function handleLocalFile(url, useLocalFile, tauriConf) {
         tauriConf.pake.windows[0].url_type = 'web';
     }
 }
+function buildLinuxDesktopContent(name, title, linuxBinaryName) {
+    const chineseName = title && /[\u4e00-\u9fa5]/.test(title) ? title : null;
+    return `[Desktop Entry]
+Version=1.0
+Type=Application
+Name=${name}
+${chineseName ? `Name[zh_CN]=${chineseName}` : ''}
+Comment=${name}
+Exec=${linuxBinaryName}
+Icon=${linuxBinaryName}
+Categories=Network;WebBrowser;Utility;
+MimeType=text/html;text/xml;application/xhtml_xml;
+StartupNotify=true
+Terminal=false
+`;
+}
 async function mergeLinuxConfig(options, name, tauriConf, linuxBinaryName) {
     const linuxBundle = tauriConf.bundle.linux;
     if (!linuxBundle) {
@@ -516,22 +643,7 @@ async function mergeLinuxConfig(options, name, tauriConf, linuxBinaryName) {
     delete linuxBundle.deb.files;
     const linuxName = generateLinuxPackageName(name);
     const desktopFileName = `com.pake.${linuxName}.desktop`;
-    const iconName = `${linuxName}_512`;
-    const { title } = options;
-    const chineseName = title && /[\u4e00-\u9fa5]/.test(title) ? title : null;
-    const desktopContent = `[Desktop Entry]
-Version=1.0
-Type=Application
-Name=${name}
-${chineseName ? `Name[zh_CN]=${chineseName}` : ''}
-Comment=${name}
-Exec=${linuxBinaryName}
-Icon=${iconName}
-Categories=Network;WebBrowser;Utility;
-MimeType=text/html;text/xml;application/xhtml_xml;
-StartupNotify=true
-Terminal=false
-`;
+    const desktopContent = buildLinuxDesktopContent(name, options.title, linuxBinaryName);
     const srcAssetsDir = path.join(npmDirectory, 'src-tauri/assets');
     const srcDesktopFilePath = path.join(srcAssetsDir, desktopFileName);
     await fsExtra.ensureDir(srcAssetsDir);
@@ -546,19 +658,44 @@ Terminal=false
     linuxBundle.rpm.files = {
         [desktopInstallPath]: `assets/${desktopFileName}`,
     };
-    const validTargets = [
-        ...LINUX_TARGET_TYPES,
-        ...LINUX_TARGET_TYPES.map((target) => `${target}-arm64`),
-    ];
-    const baseTarget = options.targets.includes('-arm64')
-        ? options.targets.replace('-arm64', '')
-        : options.targets;
-    if (validTargets.includes(options.targets)) {
-        // zst is repacked from the deb payload, so Tauri itself bundles a deb.
-        tauriConf.bundle.targets = [baseTarget === 'zst' ? 'deb' : baseTarget];
+    // options.targets reaches here already stripped of any -arm64 suffix by the
+    // LinuxBuilder constructor, and may carry several comma-separated formats
+    // (e.g. the distro-aware default "deb,appimage"). Validate the parsed list
+    // rather than string-matching the whole value, so a valid multi-target
+    // default no longer trips the "must be one of ..." warning on every build.
+    const { bundleTargets, hasValidTarget } = resolveLinuxBundleTargets(options.targets);
+    if (hasValidTarget) {
+        tauriConf.bundle.targets = bundleTargets;
     }
     else {
-        logger.warn(`✼ The target must be one of ${validTargets.join(', ')}, the default 'deb' will be used.`);
+        logger.warn(`✼ The target must be one of ${LINUX_TARGET_TYPES.join(', ')}, the default 'deb' will be used.`);
+    }
+}
+async function resolveSystemTrayIconPath(systemTrayIcon, defaultTrayIconPath, safeAppName, iconOutputDir = path.join(npmDirectory, 'src-tauri/png')) {
+    if (systemTrayIcon.length === 0) {
+        return defaultTrayIconPath;
+    }
+    try {
+        const iconExt = path.extname(systemTrayIcon).toLowerCase();
+        if (iconExt !== '.png' && iconExt !== '.ico') {
+            logger.warn(`✼ System tray icon must be .ico or .png, but you provided ${iconExt}.`);
+            logger.warn(`✼ Default system tray icon will be used.`);
+            return defaultTrayIconPath;
+        }
+        if (!(await fsExtra.pathExists(systemTrayIcon))) {
+            logger.warn(`✼ System tray icon "${systemTrayIcon}" was not found.`);
+            logger.warn(`✼ Default system tray icon will be used.`);
+            return defaultTrayIconPath;
+        }
+        const trayIconPath = `png/${safeAppName}${iconExt}`;
+        const trayIcoPath = path.join(iconOutputDir, `${safeAppName}${iconExt}`);
+        await fsExtra.copy(systemTrayIcon, trayIcoPath);
+        return trayIconPath;
+    }
+    catch (err) {
+        logger.warn(`✼ Failed to apply system tray icon "${systemTrayIcon}": ${err instanceof Error ? err.message : String(err)}`);
+        logger.warn(`✼ Default system tray icon will remain unchanged.`);
+        return defaultTrayIconPath;
     }
 }
 async function mergeIcons(options, name, tauriConf, platform, safeAppName) {
@@ -621,26 +758,8 @@ async function mergeIcons(options, name, tauriConf, platform, safeAppName) {
         tauriConf.bundle.icon = [iconInfo.defaultIcon];
     }
     // Set tray icon path.
-    let trayIconPath = platform === 'darwin' ? 'png/icon_512.png' : tauriConf.bundle.icon[0];
-    if (options.systemTrayIcon.length > 0) {
-        try {
-            await fsExtra.pathExists(options.systemTrayIcon);
-            const iconExt = path.extname(options.systemTrayIcon).toLowerCase();
-            if (iconExt === '.png' || iconExt === '.ico') {
-                const trayIcoPath = path.join(npmDirectory, `src-tauri/png/${safeAppName}${iconExt}`);
-                trayIconPath = `png/${safeAppName}${iconExt}`;
-                await fsExtra.copy(options.systemTrayIcon, trayIcoPath);
-            }
-            else {
-                logger.warn(`✼ System tray icon must be .ico or .png, but you provided ${iconExt}.`);
-                logger.warn(`✼ Default system tray icon will be used.`);
-            }
-        }
-        catch (err) {
-            logger.warn(`✼ Failed to apply system tray icon "${options.systemTrayIcon}": ${err instanceof Error ? err.message : String(err)}`);
-            logger.warn(`✼ Default system tray icon will remain unchanged.`);
-        }
-    }
+    const defaultTrayIconPath = platform === 'darwin' ? 'png/icon_512.png' : tauriConf.bundle.icon[0];
+    const trayIconPath = await resolveSystemTrayIconPath(options.systemTrayIcon, defaultTrayIconPath, safeAppName);
     tauriConf.pake.system_tray_path = trayIconPath;
     delete tauriConf.app.trayIcon;
 }
@@ -712,6 +831,9 @@ async function mergeConfig(url, options, tauriConf) {
     await copyTemplateConfigs();
     const { appVersion, userAgent, showSystemTray, useLocalFile, identifier, name = 'pake-app', installerLanguage, wasm, camera, microphone, } = options;
     const platform = asSupportedPlatform(process.platform);
+    if (options.hideTitleBar && platform !== 'darwin') {
+        logger.warn('✼ --hide-title-bar is only supported on macOS and will be ignored on this platform.');
+    }
     const tauriConfWindowOptions = buildWindowConfigOverrides(options, platform);
     Object.assign(tauriConf.pake.windows[0], { url, ...tauriConfWindowOptions });
     tauriConf.productName = name;
@@ -1050,6 +1172,16 @@ class BaseBuilder {
                 throw retryError;
             }
         }
+        // With --no-bundle there is no installer to copy; surface the raw
+        // executable the build produced instead.
+        if (this.options.bundle === false) {
+            await this.copyRawBinary(npmDirectory, name);
+            if (logSuccess) {
+                logger.success('✔ Build success!');
+                logger.success('✔ Raw binary located in', path.resolve(this.getRawBinaryPath(name)));
+            }
+            return;
+        }
         // Copy app
         const fileName = this.getFileName();
         const fileType = this.getFileType(target);
@@ -1162,14 +1294,22 @@ class BaseBuilder {
             return 0; // Disable proxy feature if version detection fails
         }
     }
+    getCargoTargetDir() {
+        return process.env.CARGO_TARGET_DIR || path.join('src-tauri', 'target');
+    }
+    resolveBuildPath(npmDirectory, buildPath) {
+        return path.isAbsolute(buildPath)
+            ? buildPath
+            : path.join(npmDirectory, buildPath);
+    }
     getBasePath() {
         const basePath = this.options.debug ? 'debug' : 'release';
-        return `src-tauri/target/${basePath}/bundle/`;
+        return path.join(this.getCargoTargetDir(), basePath, 'bundle');
     }
     getBuildAppPath(npmDirectory, fileName, fileType) {
         // For app bundles on macOS, the directory is 'macos', not 'app'
         const bundleDir = fileType.toLowerCase() === 'app' ? 'macos' : fileType.toLowerCase();
-        return path.join(npmDirectory, this.getBasePath(), bundleDir, `${fileName}.${fileType}`);
+        return path.join(this.resolveBuildPath(npmDirectory, this.getBasePath()), bundleDir, `${fileName}.${fileType}`);
     }
     /**
      * Copy raw binary file to output directory
@@ -1196,9 +1336,9 @@ class BaseBuilder {
         const binaryName = this.getBinaryName(appName);
         // Handle cross-platform builds
         if (this.options.multiArch || this.hasArchSpecificTarget()) {
-            return path.join(npmDirectory, this.getArchSpecificPath(), basePath, binaryName);
+            return path.join(this.resolveBuildPath(npmDirectory, this.getArchSpecificPath()), basePath, binaryName);
         }
-        return path.join(npmDirectory, 'src-tauri/target', basePath, binaryName);
+        return path.join(this.resolveBuildPath(npmDirectory, this.getCargoTargetDir()), basePath, binaryName);
     }
     /**
      * Get the output path for the raw binary file
@@ -1229,7 +1369,7 @@ class BaseBuilder {
      * Get architecture-specific path for binary
      */
     getArchSpecificPath() {
-        return 'src-tauri/target'; // Override in subclasses if needed
+        return this.getCargoTargetDir(); // Override in subclasses if needed
     }
 }
 BaseBuilder.ARCH_MAPPINGS = {
@@ -1260,7 +1400,9 @@ class MacBuilder extends BaseBuilder {
         this.buildArch = validArchs.includes(options.targets || '')
             ? options.targets
             : 'auto';
-        if (options.iterativeBuild ||
+        // `app` is a valid macOS bundle target (see merge.ts); honour it explicitly.
+        if (options.targets === 'app' ||
+            options.iterativeBuild ||
             options.install ||
             process.env.PAKE_CREATE_APP === '1') {
             this.buildFormat = 'app';
@@ -1315,7 +1457,10 @@ class MacBuilder extends BaseBuilder {
         const basePath = this.options.debug ? 'debug' : 'release';
         const actualArch = this.getActualArch();
         const target = this.getTauriTarget(actualArch, 'darwin');
-        return `src-tauri/target/${target}/${basePath}/bundle`;
+        if (!target) {
+            throw new Error(`Unsupported architecture: ${actualArch} for macOS`);
+        }
+        return path.join(this.getCargoTargetDir(), target, basePath, 'bundle');
     }
     hasArchSpecificTarget() {
         return true;
@@ -1323,7 +1468,10 @@ class MacBuilder extends BaseBuilder {
     getArchSpecificPath() {
         const actualArch = this.getActualArch();
         const target = this.getTauriTarget(actualArch, 'darwin');
-        return `src-tauri/target/${target}`;
+        if (!target) {
+            throw new Error(`Unsupported architecture: ${actualArch} for macOS`);
+        }
+        return path.join(this.getCargoTargetDir(), target);
     }
 }
 
@@ -1354,14 +1502,26 @@ class WinBuilder extends BaseBuilder {
     getBasePath() {
         const basePath = this.options.debug ? 'debug' : 'release';
         const target = this.getTauriTarget(this.buildArch, 'win32');
-        return `src-tauri/target/${target}/${basePath}/bundle/`;
+        if (!target) {
+            throw new Error(`Unsupported architecture: ${this.buildArch} for Windows`);
+        }
+        return path.join(this.getCargoTargetDir(), target, basePath, 'bundle');
     }
     hasArchSpecificTarget() {
         return true;
     }
     getArchSpecificPath() {
         const target = this.getTauriTarget(this.buildArch, 'win32');
-        return `src-tauri/target/${target}`;
+        if (!target) {
+            throw new Error(`Unsupported architecture: ${this.buildArch} for Windows`);
+        }
+        return path.join(this.getCargoTargetDir(), target);
+    }
+    getRawBinaryPath(appName) {
+        return `${appName}.exe`;
+    }
+    getBinaryName(appName) {
+        return `pake-${generateIdentifierSafeName(appName)}.exe`;
     }
 }
 
@@ -1389,17 +1549,11 @@ class LinuxBuilder extends BaseBuilder {
             arch =
                 buildType === 'rpm' || buildType === 'appimage' ? 'aarch64' : 'arm64';
         }
+        else if (this.buildArch === 'x64') {
+            arch = buildType === 'rpm' ? 'x86_64' : 'amd64';
+        }
         else {
-            if (this.buildArch === 'x64') {
-                arch = buildType === 'rpm' ? 'x86_64' : 'amd64';
-            }
-            else {
-                arch = this.buildArch;
-                if (this.buildArch === 'arm64' &&
-                    (buildType === 'rpm' || buildType === 'appimage')) {
-                    arch = 'aarch64';
-                }
-            }
+            arch = this.buildArch;
         }
         if (this.currentBuildType === 'rpm') {
             return `${name}-${version}-1.${arch}`;
@@ -1407,24 +1561,56 @@ class LinuxBuilder extends BaseBuilder {
         return `${name}_${version}_${arch}`;
     }
     async build(url) {
+        // --no-bundle: build the executable once with no per-format packaging loop.
+        if (this.options.bundle === false) {
+            await this.buildAndCopy(url, 'deb');
+            return;
+        }
         const targets = filterLinuxTargets(this.options.targets);
         if (targets.length === 0) {
             throw new Error(`No valid Linux target in "${this.options.targets}". Valid targets: ${LINUX_TARGET_TYPES.join(', ')}.`);
         }
         const useTemporaryDebForZst = needsTemporaryDebForZst(targets);
+        // With a single explicit target, fail fast. With multiple targets (the
+        // distro-aware default, or an explicit comma list) keep building the rest
+        // when one fails, so a usable installer is still produced, e.g. AppImage
+        // survives a .deb bundler abort on RPM-based distros.
+        const isolateFailures = targets.length > 1;
+        const failed = [];
+        let firstError = null;
         for (const target of targets) {
             this.currentBuildType = target;
-            if (target === 'zst') {
-                if (useTemporaryDebForZst) {
-                    await this.buildAndCopy(url, 'deb', false);
+            try {
+                if (target === 'zst') {
+                    if (useTemporaryDebForZst) {
+                        await this.buildAndCopy(url, 'deb', false);
+                    }
+                    await this.createArchPackageFromDeb({
+                        removeSourceDeb: useTemporaryDebForZst,
+                    });
                 }
-                await this.createArchPackageFromDeb({
-                    removeSourceDeb: useTemporaryDebForZst,
-                });
+                else {
+                    await this.buildAndCopy(url, target);
+                }
             }
-            else {
-                await this.buildAndCopy(url, target);
+            catch (error) {
+                const err = error instanceof Error ? error : new Error(String(error));
+                if (!isolateFailures) {
+                    throw err;
+                }
+                if (!firstError) {
+                    firstError = err;
+                }
+                failed.push(target);
+                logger.warn(`✼ Failed to build "${target}" target: ${err.message.split('\n')[0]}`);
             }
+        }
+        // Every requested target failed: surface the first real error.
+        if (firstError && failed.length === targets.length) {
+            throw firstError;
+        }
+        if (failed.length > 0) {
+            logger.warn(`✼ Skipped failed Linux targets: ${failed.join(', ')}. Other formats built successfully.`);
         }
     }
     async ensureArchPackagingTools() {
@@ -1538,6 +1724,11 @@ post_remove() {
             ? (this.getTauriTarget(this.buildArch, 'linux') ?? undefined)
             : undefined;
         let fullCommand = this.buildBaseCommand(packageManager, configPath, buildTarget);
+        // --no-bundle: build the executable only, skipping .deb/.rpm/.appimage
+        // packaging entirely (e.g. RPM-based distros where the bundler aborts).
+        if (this.options.bundle === false) {
+            return `${fullCommand} --no-bundle`;
+        }
         if (this.currentBuildType) {
             fullCommand += ` --bundles ${this.currentBuildType}`;
         }
@@ -1556,7 +1747,10 @@ post_remove() {
         const basePath = this.options.debug ? 'debug' : 'release';
         if (this.buildArch === 'arm64') {
             const target = this.getTauriTarget(this.buildArch, 'linux');
-            return `src-tauri/target/${target}/${basePath}/bundle/`;
+            if (!target) {
+                throw new Error(`Unsupported architecture: ${this.buildArch} for Linux`);
+            }
+            return path.join(this.getCargoTargetDir(), target, basePath, 'bundle');
         }
         return super.getBasePath();
     }
@@ -1572,7 +1766,10 @@ post_remove() {
     getArchSpecificPath() {
         if (this.buildArch === 'arm64') {
             const target = this.getTauriTarget(this.buildArch, 'linux');
-            return `src-tauri/target/${target}`;
+            if (!target) {
+                throw new Error(`Unsupported architecture: ${this.buildArch} for Linux`);
+            }
+            return path.join(this.getCargoTargetDir(), target);
         }
         return super.getArchSpecificPath();
     }
@@ -2093,6 +2290,19 @@ async function convertIconFormat(inputPath, appName) {
         return null;
     }
 }
+async function isLinuxBundleIconReady(iconPath) {
+    if (!IS_LINUX || path.extname(iconPath).toLowerCase() !== '.png') {
+        return false;
+    }
+    try {
+        const { width, height } = await sharp(iconPath).metadata();
+        return (width === PLATFORM_CONFIG.linux.size &&
+            height === PLATFORM_CONFIG.linux.size);
+    }
+    catch {
+        return false;
+    }
+}
 /**
  * Processes downloaded or local icon for platform-specific format
  */
@@ -2102,7 +2312,7 @@ async function processIcon(iconPath, appName) {
     // Check if already in correct platform format
     const ext = path.extname(iconPath).toLowerCase();
     const isCorrectFormat = (IS_WIN && ext === '.ico') ||
-        (IS_LINUX && ext === '.png') ||
+        (IS_LINUX && (await isLinuxBundleIconReady(iconPath))) ||
         (!IS_WIN && !IS_LINUX && ext === '.icns');
     if (isCorrectFormat) {
         return await copyWindowsIconIfNeeded(iconPath, appName);
@@ -2410,6 +2620,20 @@ function normalizeUrl(urlToNormalize) {
         throw new Error(`Your url "${urlWithProtocol}" is invalid: ${err.message}`);
     }
 }
+// Compiles a comma-separated domain list into a regex source for
+// internal_url_regex. Each domain is escaped and matched against the URL host
+// and its subdomains so path or query text cannot accidentally opt a link in.
+// Returns '' for empty input.
+function safeDomainsToRegex(domains) {
+    const escaped = domains
+        .split(',')
+        .map((domain) => domain.trim().toLowerCase())
+        .filter(Boolean)
+        .map((domain) => domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return escaped.length
+        ? `^https?:\\/\\/(?:[^/?#@]+\\.)*(?:${escaped.join('|')})(?::\\d+)?(?:[/?#]|$)`
+        : '';
+}
 
 /**
  * Error class used for user-facing CLI errors.
@@ -2490,6 +2714,15 @@ async function handleOptions(options, url) {
         name: resolvedName,
         identifier: resolveIdentifier(url, options.name, options.identifier),
     };
+    // --safe-domain is sugar over --internal-url-regex; an explicit regex wins.
+    if (!options.internalUrlRegex && options.safeDomain) {
+        appOptions.internalUrlRegex = safeDomainsToRegex(options.safeDomain);
+    }
+    // --no-bundle is Linux-only; keep normal packaging on other platforms.
+    if (appOptions.bundle === false && platform !== 'linux') {
+        logger.warn('✼ --no-bundle is only supported on Linux; ignoring it.');
+        appOptions.bundle = true;
+    }
     const iconPath = await handleIcon(appOptions, url);
     appOptions.icon = iconPath || '';
     return appOptions;
@@ -2513,7 +2746,7 @@ const DEFAULT_PAKE_OPTIONS = {
     targets: (() => {
         switch (process.platform) {
             case 'linux':
-                return 'deb,appimage';
+                return getDefaultLinuxTargets();
             case 'darwin':
                 return 'dmg';
             case 'win32':
@@ -2532,12 +2765,14 @@ const DEFAULT_PAKE_OPTIONS = {
     incognito: false,
     wasm: false,
     enableDragDrop: false,
+    bundle: true,
     keepBinary: false,
     multiInstance: false,
     multiWindow: false,
     startToTray: false,
     forceInternalNavigation: false,
     internalUrlRegex: '',
+    safeDomain: '',
     enableFind: false,
     iterativeBuild: false,
     zoom: 100,
@@ -2548,6 +2783,12 @@ const DEFAULT_PAKE_OPTIONS = {
     install: false,
     camera: false,
     microphone: false,
+    showToolbar: false,
+    translate: '',
+    externalLinks: 'browser',
+    adblock: false,
+    adblockStrict: false,
+    tabs: false,
 };
 
 function validateNumberInput(value) {
@@ -2564,7 +2805,7 @@ function validateNumberInput(value) {
     return parsedValue;
 }
 function validateUrlInput(url) {
-    const isFile = fs$1.existsSync(url);
+    const isFile = fs.existsSync(url);
     if (!isFile) {
         try {
             return normalizeUrl(url);
@@ -2590,6 +2831,7 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
     return program$1
         .addHelpText('beforeAll', logo)
         .usage(`[url] [options]`)
+        .helpOption('-h, --help', 'Show all CLI options')
         .showHelpAfterError()
         .argument('[url]', 'The web URL you want to package', validateUrlInput)
         .option('--name <string>', 'Application name')
@@ -2629,7 +2871,7 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .addOption(new Option('--maximize', 'Start window maximized')
         .default(DEFAULT_PAKE_OPTIONS.maximize)
         .hideHelp())
-        .addOption(new Option('--dark-mode', 'Force Mac app to use dark mode')
+        .addOption(new Option('--dark-mode', 'Force app to use dark mode (supports macOS, Windows, and Linux)')
         .default(DEFAULT_PAKE_OPTIONS.darkMode)
         .hideHelp())
         .addOption(new Option('--disabled-web-shortcuts', 'Disabled webPage shortcuts')
@@ -2669,6 +2911,9 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .addOption(new Option('--keep-binary', 'Keep raw binary file alongside installer')
         .default(DEFAULT_PAKE_OPTIONS.keepBinary)
         .hideHelp())
+        .addOption(new Option('--no-bundle', 'Skip packaging, output only the raw executable (Linux; for RPM distros where the bundler aborts)')
+        .default(DEFAULT_PAKE_OPTIONS.bundle)
+        .hideHelp())
         .addOption(new Option('--multi-instance', 'Allow multiple app instances')
         .default(DEFAULT_PAKE_OPTIONS.multiInstance)
         .hideHelp())
@@ -2678,12 +2923,9 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .addOption(new Option('--start-to-tray', 'Start app minimized to tray')
         .default(DEFAULT_PAKE_OPTIONS.startToTray)
         .hideHelp())
-        .addOption(new Option('--force-internal-navigation', 'Keep every link inside the Pake window instead of opening external handlers')
-        .default(DEFAULT_PAKE_OPTIONS.forceInternalNavigation)
-        .hideHelp())
-        .addOption(new Option('--internal-url-regex <string>', 'Regex pattern to match URLs that should be considered internal')
-        .default(DEFAULT_PAKE_OPTIONS.internalUrlRegex)
-        .hideHelp())
+        .addOption(new Option('--force-internal-navigation', 'Keep every link inside the Pake window instead of opening external handlers').default(DEFAULT_PAKE_OPTIONS.forceInternalNavigation))
+        .addOption(new Option('--internal-url-regex <string>', 'Regex pattern to match URLs that should be considered internal').default(DEFAULT_PAKE_OPTIONS.internalUrlRegex))
+        .addOption(new Option('--safe-domain <domains>', 'Comma-separated domains kept inside the app (e.g. SSO/workspace callbacks)').default(DEFAULT_PAKE_OPTIONS.safeDomain))
         .addOption(new Option('--enable-find', 'Enable in-page Find UI with Cmd/Ctrl+F/G shortcuts')
         .default(DEFAULT_PAKE_OPTIONS.enableFind)
         .hideHelp())
@@ -2694,8 +2936,8 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .default(DEFAULT_PAKE_OPTIONS.zoom)
         .argParser((value) => {
         const zoom = Number(value);
-        if (!Number.isFinite(zoom) || zoom < 50 || zoom > 200) {
-            throw new Error('--zoom must be a number between 50 and 200');
+        if (!Number.isInteger(zoom) || zoom < 50 || zoom > 200) {
+            throw new Error('--zoom must be an integer between 50 and 200');
         }
         return zoom;
     })
@@ -2714,9 +2956,7 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .addOption(new Option('--iterative-build', 'Turn on rapid build mode (app only, no dmg/deb/msi), good for debugging')
         .default(DEFAULT_PAKE_OPTIONS.iterativeBuild)
         .hideHelp())
-        .addOption(new Option('--new-window', 'Allow sites to open new windows (for auth flows, tabs, branches)')
-        .default(DEFAULT_PAKE_OPTIONS.newWindow)
-        .hideHelp())
+        .addOption(new Option('--new-window', 'Allow sites to open new windows (for auth flows, tabs, branches)').default(DEFAULT_PAKE_OPTIONS.newWindow))
         .addOption(new Option('--install', 'Auto-install app to /Applications (macOS) after build and remove local bundle')
         .default(DEFAULT_PAKE_OPTIONS.install)
         .hideHelp())
@@ -2726,17 +2966,41 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .addOption(new Option('--microphone', 'Request microphone permission on macOS')
         .default(DEFAULT_PAKE_OPTIONS.microphone)
         .hideHelp())
+        .addOption(new Option('--show-toolbar', 'Show a compact in-page toolbar with Back/Forward/Reload/Home controls')
+        .default(DEFAULT_PAKE_OPTIONS.showToolbar)
+        .hideHelp())
+        .addOption(new Option('--translate [language]', 'Enable the Translate action (Ctrl/Cmd+T) targeting the given language, default en')
+        .default(DEFAULT_PAKE_OPTIONS.translate)
+        .hideHelp())
+        .addOption(new Option('--external-links <mode>', "Where cross-origin links open: 'browser' (system default) or 'window' (new app window)")
+        .default(DEFAULT_PAKE_OPTIONS.externalLinks)
+        .choices(['browser', 'window'])
+        .hideHelp())
+        .addOption(new Option('--adblock', 'Block common ad/tracker requests with a small curated hostname list')
+        .default(DEFAULT_PAKE_OPTIONS.adblock)
+        .hideHelp())
+        .addOption(new Option('--adblock-strict', 'Like --adblock, also blocking common analytics/tracking-pixel hosts')
+        .default(DEFAULT_PAKE_OPTIONS.adblockStrict)
+        .hideHelp())
+        .addOption(new Option('--tabs', 'Enable same-window browser tabs (tab strip with shared session/cookies)')
+        .default(DEFAULT_PAKE_OPTIONS.tabs)
+        .hideHelp())
         .version(packageJson.version, '-v, --version')
         .configureHelp({
         sortSubcommands: true,
+        visibleOptions: (command) => {
+            const options = [...command.options];
+            const helpOption = command
+                ._helpOption;
+            if (helpOption) {
+                options.push(helpOption);
+            }
+            return options;
+        },
         optionTerm: (option) => {
-            if (option.flags === '-v, --version' || option.flags === '-h, --help')
-                return '';
             return option.flags;
         },
         optionDescription: (option) => {
-            if (option.flags === '-v, --version' || option.flags === '-h, --help')
-                return '';
             return option.description;
         },
     });

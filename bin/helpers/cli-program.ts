@@ -16,6 +16,7 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
   return program
     .addHelpText('beforeAll', logo)
     .usage(`[url] [options]`)
+    .helpOption('-h, --help', 'Show all CLI options')
     .showHelpAfterError()
     .argument('[url]', 'The web URL you want to package', validateUrlInput)
     .option('--name <string>', 'Application name')
@@ -102,7 +103,10 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .hideHelp(),
     )
     .addOption(
-      new Option('--dark-mode', 'Force Mac app to use dark mode')
+      new Option(
+        '--dark-mode',
+        'Force app to use dark mode (supports macOS, Windows, and Linux)',
+      )
         .default(DEFAULT.darkMode)
         .hideHelp(),
     )
@@ -162,6 +166,14 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .hideHelp(),
     )
     .addOption(
+      new Option(
+        '--no-bundle',
+        'Skip packaging, output only the raw executable (Linux; for RPM distros where the bundler aborts)',
+      )
+        .default(DEFAULT.bundle)
+        .hideHelp(),
+    )
+    .addOption(
       new Option('--multi-instance', 'Allow multiple app instances')
         .default(DEFAULT.multiInstance)
         .hideHelp(),
@@ -183,17 +195,19 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
       new Option(
         '--force-internal-navigation',
         'Keep every link inside the Pake window instead of opening external handlers',
-      )
-        .default(DEFAULT.forceInternalNavigation)
-        .hideHelp(),
+      ).default(DEFAULT.forceInternalNavigation),
     )
     .addOption(
       new Option(
         '--internal-url-regex <string>',
         'Regex pattern to match URLs that should be considered internal',
-      )
-        .default(DEFAULT.internalUrlRegex)
-        .hideHelp(),
+      ).default(DEFAULT.internalUrlRegex),
+    )
+    .addOption(
+      new Option(
+        '--safe-domain <domains>',
+        'Comma-separated domains kept inside the app (e.g. SSO/workspace callbacks)',
+      ).default(DEFAULT.safeDomain),
     )
     .addOption(
       new Option(
@@ -213,8 +227,8 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .default(DEFAULT.zoom)
         .argParser((value) => {
           const zoom = Number(value);
-          if (!Number.isFinite(zoom) || zoom < 50 || zoom > 200) {
-            throw new Error('--zoom must be a number between 50 and 200');
+          if (!Number.isInteger(zoom) || zoom < 50 || zoom > 200) {
+            throw new Error('--zoom must be an integer between 50 and 200');
           }
           return zoom;
         })
@@ -252,9 +266,7 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
       new Option(
         '--new-window',
         'Allow sites to open new windows (for auth flows, tabs, branches)',
-      )
-        .default(DEFAULT.newWindow)
-        .hideHelp(),
+      ).default(DEFAULT.newWindow),
     )
     .addOption(
       new Option(
@@ -274,17 +286,71 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .default(DEFAULT.microphone)
         .hideHelp(),
     )
+    .addOption(
+      new Option(
+        '--show-toolbar',
+        'Show a compact in-page toolbar with Back/Forward/Reload/Home controls',
+      )
+        .default(DEFAULT.showToolbar)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--translate [language]',
+        'Enable the Translate action (Ctrl/Cmd+T) targeting the given language, default en',
+      )
+        .default(DEFAULT.translate)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--external-links <mode>',
+        "Where cross-origin links open: 'browser' (system default) or 'window' (new app window)",
+      )
+        .default(DEFAULT.externalLinks)
+        .choices(['browser', 'window'])
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--adblock',
+        'Block common ad/tracker requests with a small curated hostname list',
+      )
+        .default(DEFAULT.adblock)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--adblock-strict',
+        'Like --adblock, also blocking common analytics/tracking-pixel hosts',
+      )
+        .default(DEFAULT.adblockStrict)
+        .hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--tabs',
+        'Enable same-window browser tabs (tab strip with shared session/cookies)',
+      )
+        .default(DEFAULT.tabs)
+        .hideHelp(),
+    )
     .version(packageJson.version, '-v, --version')
     .configureHelp({
       sortSubcommands: true,
+      visibleOptions: (command) => {
+        const options = [...command.options];
+        const helpOption = (command as unknown as { _helpOption?: Option })
+          ._helpOption;
+        if (helpOption) {
+          options.push(helpOption);
+        }
+        return options;
+      },
       optionTerm: (option) => {
-        if (option.flags === '-v, --version' || option.flags === '-h, --help')
-          return '';
         return option.flags;
       },
       optionDescription: (option) => {
-        if (option.flags === '-v, --version' || option.flags === '-h, --help')
-          return '';
         return option.description;
       },
     });

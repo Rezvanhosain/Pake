@@ -6,24 +6,58 @@ const shortcuts = {
   "+": () => zoomIn(),
   0: () => setZoom("100%"),
   r: () => window.location.reload(),
+  h: () => pakeGoHome(),
+  l: () => navigator.clipboard.writeText(window.location.href),
+  t: () => {
+    // In tabbed mode Ctrl/Cmd+T opens a new tab (browser convention);
+    // otherwise it keeps the Translate action.
+    if (window.pakeConfig?.tabs === true) {
+      window.__TAURI__?.core?.invoke("tab_new", {});
+    } else {
+      pakeTranslate();
+    }
+  },
+  n: () =>
+    window.pakeOpenInNewWindow &&
+    window.pakeOpenInNewWindow(window.location.href),
   ArrowUp: () => scrollTo(0, 0),
   ArrowDown: () => scrollTo(0, document.body.scrollHeight),
 };
 
-function setZoom(zoom) {
-  const html = document.getElementsByTagName("html")[0];
-  const body = document.body;
-  const zoomValue = parseFloat(zoom) / 100;
-  const isWindows = /windows/i.test(navigator.userAgent);
+// Navigate back to the app's configured start URL.
+function pakeGoHome() {
+  const home = window.pakeConfig?.url;
+  if (home) {
+    window.location.href = home;
+  }
+}
+window.pakeGoHome = pakeGoHome;
 
-  if (isWindows) {
-    body.style.transform = `scale(${zoomValue})`;
-    body.style.transformOrigin = "top left";
-    body.style.width = `${100 / zoomValue}%`;
-    body.style.height = `${100 / zoomValue}%`;
-  } else {
-    html.style.zoom = zoom;
-    window.dispatchEvent(new Event("resize"));
+// Reload the current page through Google's translate.goog proxy. This is a
+// URL-rewrite fallback, not built-in webview translation (no system webview
+// exposes one); it covers most public sites but not pages behind logins,
+// because the proxy fetches the page from its own servers.
+function pakeTranslate() {
+  const target = window.pakeConfig?.translation_target;
+  if (!target) return;
+  const host = window.location.hostname;
+  if (host.endsWith(".translate.goog")) return;
+  const url = new URL(window.location.href);
+  url.hostname = `${host.replace(/-/g, "--").replace(/\./g, "-")}.translate.goog`;
+  url.searchParams.set("_x_tr_sl", "auto");
+  url.searchParams.set("_x_tr_tl", target);
+  window.location.href = url.href;
+}
+window.pakeTranslate = pakeTranslate;
+
+function setZoom(zoom) {
+  // Use native WebView zoom (WKWebView pageZoom / WebView2 ZoomFactor) instead of
+  // CSS hacks. `transform: scale` and `html.style.zoom` break complex SPAs like
+  // ChatGPT: the page shifts right on Windows and parts of the UI stop repainting
+  // on macOS. Native zoom recalculates layout exactly like a browser does.
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) {
+    invoke("set_zoom", { percent: parseFloat(zoom) }).catch(() => {});
   }
 
   window.localStorage.setItem("htmlZoom", zoom);
@@ -57,6 +91,177 @@ function handleShortcut(event) {
     event.preventDefault();
     shortcuts[event.key]();
   }
+}
+
+function isNonMacDesktop() {
+  return /windows|linux/i.test(navigator.userAgent);
+}
+
+function isEditableElement(element) {
+  if (!element) return false;
+
+  const tagName = element.tagName;
+  return (
+    tagName === "INPUT" || tagName === "TEXTAREA" || element.isContentEditable
+  );
+}
+
+function hasSelectedText() {
+  return Boolean(window.getSelection?.()?.toString());
+}
+
+const NON_TEXT_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
+function isTextInputElement(element) {
+  return (
+    element?.tagName === "INPUT" &&
+    !NON_TEXT_INPUT_TYPES.has((element.type || "text").toLowerCase())
+  );
+}
+
+function selectEditableElement(element) {
+  if (typeof element.select === "function") {
+    element.select();
+    return true;
+  }
+
+  if (element.isContentEditable) {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection?.();
+    if (!selection) return false;
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }
+
+  return false;
+}
+
+function canPasteIntoEditableElement(element) {
+  if (!isEditableElement(element)) return false;
+
+  if (element.tagName === "INPUT") {
+    return (
+      isTextInputElement(element) &&
+      element.disabled !== true &&
+      element.readOnly !== true
+    );
+  }
+
+  if (element.tagName === "TEXTAREA") {
+    return element.disabled !== true && element.readOnly !== true;
+  }
+
+  return true;
+}
+
+function insertTextIntoEditableElement(element, text) {
+  if (!text) return false;
+
+  if (document.execCommand("insertText", false, text)) {
+    return true;
+  }
+
+  if (
+    element &&
+    (isTextInputElement(element) || element.tagName === "TEXTAREA") &&
+    typeof element.setRangeText === "function"
+  ) {
+    const valueLength =
+      typeof element.value === "string" ? element.value.length : 0;
+    const start =
+      typeof element.selectionStart === "number"
+        ? element.selectionStart
+        : valueLength;
+    const end =
+      typeof element.selectionEnd === "number" ? element.selectionEnd : start;
+    element.setRangeText(text, start, end, "end");
+    element.dispatchEvent?.(new Event("input", { bubbles: true }));
+    return true;
+  }
+
+  return false;
+}
+
+function runBrowserPasteCommand() {
+  try {
+    return document.execCommand("paste") === true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function pasteClipboardText(activeElement) {
+  if (runBrowserPasteCommand()) {
+    return;
+  }
+
+  const readText = navigator.clipboard?.readText;
+  if (typeof readText !== "function") {
+    return;
+  }
+
+  readText
+    .call(navigator.clipboard)
+    .then((text) => {
+      insertTextIntoEditableElement(activeElement, text);
+    })
+    .catch(() => {});
+}
+
+function handleClipboardShortcut(event) {
+  if (
+    event.isTrusted !== true ||
+    !isNonMacDesktop() ||
+    !event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.shiftKey
+  ) {
+    return false;
+  }
+
+  const key = event.key?.toLowerCase();
+  const activeElement = document.activeElement;
+  const isEditable = isEditableElement(activeElement);
+
+  if (key === "c" && (isEditable || hasSelectedText())) {
+    document.execCommand("copy");
+    event.preventDefault();
+    return true;
+  }
+
+  if (key === "x" && isEditable) {
+    document.execCommand("cut");
+    event.preventDefault();
+    return true;
+  }
+
+  if (key === "v" && canPasteIntoEditableElement(activeElement)) {
+    event.preventDefault();
+    pasteClipboardText(activeElement);
+    return true;
+  }
+
+  if (key === "a" && isEditable && selectEditableElement(activeElement)) {
+    event.preventDefault();
+    return true;
+  }
+
+  return false;
 }
 
 const DOWNLOADABLE_FILE_EXTENSIONS = {
@@ -281,12 +486,34 @@ function canNavigateAuthUrl(url) {
   return normalizedUrl !== "" && normalizedUrl !== "about:blank";
 }
 
+function isAppleAuthPopup(url, name) {
+  if (name === "AppleAuthentication") {
+    return true;
+  }
+
+  try {
+    return (
+      new URL(url, window.location.href).hostname.toLowerCase() ===
+      "appleid.apple.com"
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
 function navigateInCurrentWindow(url) {
   window.location.href = url;
   return window;
 }
 
 function openAuthNavigation(originalWindowOpen, url, name, specs) {
+  if (isAppleAuthPopup(url, name)) {
+    const authWindow = originalWindowOpen.call(window, url, name, specs);
+    if (authWindow) {
+      return authWindow;
+    }
+  }
+
   if (shouldNavigateAuthInCurrentWindow() && canNavigateAuthUrl(url)) {
     return navigateInCurrentWindow(url);
   }
@@ -351,6 +578,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  document.addEventListener("keydown", handleClipboardShortcut, true);
+
   document.addEventListener(
     "paste",
     (event) => {
@@ -393,6 +622,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // Don't try to open blob: or data: URLs with shell
     if (isSpecialDownload(url)) {
       console.warn("Cannot open special URL with shell:", url);
+      return;
+    }
+
+    // Policy: keep external links inside the app as a new app window instead
+    // of the system browser. Requires popup support (new_window), which the
+    // CLI enables automatically for this mode; the unpatched window.open
+    // triggers the Rust on_new_window handler that builds the child window.
+    if (
+      pakeConfig.external_links_in_window === true &&
+      pakeConfig.new_window === true
+    ) {
+      originalWindowOpen.call(window, url, "_blank");
       return;
     }
 
@@ -459,20 +700,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const absoluteUrl = hrefUrl.href;
       let filename = anchorElement.download || getFilenameFromUrl(absoluteUrl);
 
-      // Keep OAuth/authentication flows inside the app when popup support is enabled.
+      // Keep OAuth/authentication flows inside the app. Without --new-window,
+      // navigate in place so the SSO redirect chain and callback stay in the
+      // webview instead of falling through to the system browser.
       if (window.isAuthLink(absoluteUrl)) {
         console.log("[Pake] Handling OAuth navigation in-app:", absoluteUrl);
+        e.preventDefault();
+        e.stopImmediatePropagation();
 
         if (window.pakeConfig?.new_window) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-
           openAuthNavigation(
             originalWindowOpen,
             absoluteUrl,
             "_blank",
             "width=1200,height=800,scrollbars=yes,resizable=yes",
           );
+        } else {
+          window.location.href = absoluteUrl;
         }
 
         return;
@@ -488,7 +732,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (isInternalUrl(absoluteUrl)) {
-          // For internal links (based on regex or domain), let the browser handle it naturally
+          // With --new-window the Rust on_new_window handler opens an in-app
+          // window. Without it, leaving target="_blank" untouched lets the
+          // native webview escalate the click to a system-browser "new window".
+          //
+          // Many SPAs (e.g. Plane) tag in-app links with target="_blank" but
+          // route the click themselves via a React onClick that calls
+          // preventDefault + client-side navigation. Forcing a full
+          // window.location reload here (and stopping propagation) would defeat
+          // that handler and reload the whole app on every click. Instead,
+          // retarget the link to "_self" so the webview never opens a browser
+          // window, then let the page's own handler run. If nothing intercepts
+          // the click, the default _self navigation keeps it inside the app.
+          if (!window.pakeConfig?.new_window) {
+            anchorElement.target = "_self";
+          }
           return;
         }
 
@@ -592,11 +850,59 @@ document.addEventListener("DOMContentLoaded", () => {
         return null;
       }
 
+      // With --new-window the native handler opens an in-app window; without it,
+      // originalWindowOpen would route the internal target to the system browser
+      // and strand SSO callbacks, so navigate in place instead.
+      if (!window.pakeConfig?.new_window) {
+        window.location.href = absoluteUrl;
+        return window;
+      }
+
       return originalWindowOpen.call(window, absoluteUrl, name, specs);
     } catch (error) {
       return originalWindowOpen.call(window, url, name, specs);
     }
   };
+
+  // Open a URL in a new in-app window, reusing the native on_new_window handler
+  // (enabled by --new-window). Falls back to same-window navigation when popup
+  // windows are not enabled, so the control still does something useful.
+  function pakeOpenInNewWindow(url) {
+    if (!url) return;
+    // Tabbed mode: open the URL as a new in-app tab in the same window.
+    if (window.pakeConfig?.tabs === true) {
+      const tabInvoke = window.__TAURI__?.core?.invoke;
+      if (tabInvoke) {
+        tabInvoke("tab_new", { url });
+        return;
+      }
+    }
+    if (window.pakeConfig?.new_window === true) {
+      originalWindowOpen.call(window, url, "_blank");
+    } else {
+      window.location.href = url;
+    }
+  }
+  window.pakeOpenInNewWindow = pakeOpenInNewWindow;
+
+  // Ctrl/Cmd-click and middle-click on a link open it in a new in-app window,
+  // matching the browser convention for "open in new tab/window". Runs in the
+  // capture phase so it wins over the site's own SPA click handling.
+  const openLinkInNewWindow = (e) => {
+    const isModifierClick =
+      e.type === "auxclick" ? e.button === 1 : e.ctrlKey || e.metaKey;
+    if (!isModifierClick) return;
+    if (!e.target || typeof e.target.closest !== "function") return;
+    const anchor = e.target.closest("a");
+    if (!anchor || !anchor.href) return;
+    const href = anchor.href;
+    if (!/^https?:/i.test(href)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    pakeOpenInNewWindow(href);
+  };
+  document.addEventListener("click", openLinkInNewWindow, true);
+  document.addEventListener("auxclick", openLinkInNewWindow, true);
 
   // Set the default zoom, There are problems with Loop without using try-catch.
   try {
@@ -624,6 +930,7 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadFile: isChinese ? "下载文件" : "Download File",
     copyAddress: isChinese ? "复制地址" : "Copy Address",
     openInBrowser: isChinese ? "浏览器打开" : "Open in Browser",
+    openInNewTab: isChinese ? "在新标签页打开链接" : "Open link in new tab",
   };
 
   // Menu theme configuration
@@ -879,6 +1186,14 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
 
       case "link":
+        // Tabbed mode: offer "Open link in new tab" as the first action.
+        if (window.pakeConfig?.tabs === true) {
+          items.push(
+            createMenuItem(menuTexts.openInNewTab, () =>
+              window.pakeOpenInNewWindow(data.url),
+            ),
+          );
+        }
         if (data.isFile) {
           items.push(
             createMenuItem(menuTexts.downloadFile, () => {
@@ -1111,8 +1426,17 @@ function getFilenameFromUrl(url) {
 
       // Detect image type from URL or data URI
       if (url.startsWith("data:image/")) {
-        const mimeType = url.substring(11, url.indexOf(";"));
-        filename = `image-${timestamp}.${mimeType}`;
+        // Read only the MIME subtype: stop at ';' (params) or ',' (data),
+        // whichever comes first, so we never fold the encoding/payload into
+        // the extension. Map structured suffixes (svg+xml -> svg) and jpeg.
+        const semicolon = url.indexOf(";");
+        const comma = url.indexOf(",");
+        let end = url.length;
+        if (semicolon !== -1) end = Math.min(end, semicolon);
+        if (comma !== -1) end = Math.min(end, comma);
+        let ext = url.substring(11, end).split("+")[0];
+        if (ext === "jpeg") ext = "jpg";
+        filename = `image-${timestamp}.${ext}`;
       } else {
         // Default to common image extensions based on common patterns
         if (url.includes("jpg") || url.includes("jpeg")) {

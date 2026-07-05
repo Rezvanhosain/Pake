@@ -38,7 +38,7 @@ export interface PakeCliOptions {
   // App version, the same as package.json version, default 1.0.0
   appVersion: string;
 
-  // Force Mac to use dark mode, default false
+  // Force app to use dark mode (supports macOS, Windows, and Linux), default false
   darkMode: boolean;
 
   // Disable web shortcuts, default false
@@ -90,6 +90,10 @@ export interface PakeCliOptions {
   // Enable drag and drop functionality, default false
   enableDragDrop: boolean;
 
+  // Build the executable without packaging it into an installer (Linux only),
+  // default true. Set false via --no-bundle for RPM distros where the bundler aborts.
+  bundle: boolean;
+
   // Keep raw binary file alongside installer, default false
   keepBinary: boolean;
 
@@ -107,6 +111,9 @@ export interface PakeCliOptions {
 
   // Regex pattern to match URLs that should be considered internal
   internalUrlRegex: string;
+
+  // Comma-separated domains kept inside the app, compiled into internalUrlRegex, default empty
+  safeDomain: string;
 
   // Enable in-page Find UI and Cmd/Ctrl+F/G shortcuts, default false
   enableFind: boolean;
@@ -137,6 +144,25 @@ export interface PakeCliOptions {
 
   // Request microphone entitlement on macOS, default false
   microphone: boolean;
+
+  // Show the compact in-page navigation toolbar, default false
+  showToolbar: boolean;
+
+  // Target language for the Translate action (e.g. "en"); empty disables it.
+  // Commander yields `true` when --translate is passed without a value.
+  translate: string | true;
+
+  // Where external (cross-origin) links open: system 'browser' or a new app 'window'
+  externalLinks: 'browser' | 'window';
+
+  // Lightweight ad/tracker request blocking (curated hostname list, off by default)
+  adblock: boolean;
+
+  // Adds analytics/tracking-pixel hosts on top of the basic ad-serving list
+  adblockStrict: boolean;
+
+  // Same-window browser tabs (tab strip + shared-session content webviews)
+  tabs: boolean;
 }
 
 export interface PakeAppOptions extends PakeCliOptions {
@@ -176,6 +202,11 @@ export interface WindowConfig {
   min_height: number;
   ignore_certificate_errors: boolean;
   new_window: boolean;
+  show_toolbar: boolean;
+  translation_target: string;
+  external_links_in_window: boolean;
+  adblock_mode: string;
+  tabs: boolean;
 }
 
 export interface PakeConfig {

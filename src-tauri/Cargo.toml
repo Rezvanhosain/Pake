@@ -1,6 +1,6 @@
 [package]
 name = "pake"
-version = "3.11.10"
+version = "3.13.1"
 description = "🤱🏻 Turn any webpage into a desktop app with Rust."
 authors = ["Tw93"]
 license = "GPL-3.0-or-later"
@@ -26,6 +26,8 @@ tauri = { version = "2.10.2", features = [
   "image-ico",
   "image-png",
   "macos-proxy",
+  "unstable",
+  "webview-data-url",
 ] }
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-oauth = "2.0.0"

@@ -1,6 +1,7 @@
 use crate::app::config::PakeConfig;
 use crate::util::{
-    check_file_or_append, get_data_dir, get_download_message_with_lang, show_toast, MessageType,
+    check_file_or_append, get_data_dir, get_download_message_with_lang, sanitize_download_filename,
+    show_toast, MessageType,
 };
 use std::{
     path::PathBuf,
@@ -12,8 +13,10 @@ use tauri::{
     AppHandle, Config, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
+use tauri::Theme;
+
 #[cfg(target_os = "macos")]
-use tauri::{Theme, TitleBarStyle};
+use tauri::TitleBarStyle;
 
 #[cfg(target_os = "windows")]
 fn build_proxy_browser_arg(url: &Url) -> Option<String> {
@@ -287,12 +290,22 @@ fn build_window(
     // any script that reads it (e.g. fullscreen polyfill checks for an opt-out
     // flag), and toast must register `window.pakeToast` before Rust code
     // calls show_toast().
+    window_builder = window_builder.initialization_script(&config_script);
+
+    // find.js is opt-in via --enable-find and no-ops at runtime when disabled,
+    // so only inject its ~700 lines when the feature is on. Avoids parsing the
+    // find UI on every page load in the common (find-off) case. Matches the
+    // enable_find gating already applied to the Find menu item.
+    if window_config.enable_find {
+        window_builder = window_builder.initialization_script(include_str!("../inject/find.js"));
+    }
+
     window_builder = window_builder
-        .initialization_script(&config_script)
-        .initialization_script(include_str!("../inject/find.js"))
+        .initialization_script(include_str!("../inject/adblock.js"))
         .initialization_script(include_str!("../inject/toast.js"))
         .initialization_script(include_str!("../inject/fullscreen.js"))
         .initialization_script(include_str!("../inject/event.js"))
+        .initialization_script(include_str!("../inject/toolbar.js"))
         .initialization_script(include_str!("../inject/style.js"))
         .initialization_script(include_str!("../inject/theme_refresh.js"))
         .initialization_script(include_str!("../inject/auth.js"))
@@ -344,6 +357,14 @@ fn build_window(
 
     let mut parsed_proxy_url: Option<Url> = None;
 
+    // Default to following the system theme (None), only force dark when explicitly set.
+    // Computed once; the matching platform block below is the sole consumer.
+    let theme = if window_config.dark_mode {
+        Some(Theme::Dark)
+    } else {
+        None // Follow system theme
+    };
+
     // Platform-specific configuration must be set before proxy on Windows/Linux
     #[cfg(target_os = "macos")]
     {
@@ -353,20 +374,13 @@ fn build_window(
             TitleBarStyle::Visible
         };
         window_builder = window_builder.title_bar_style(title_bar_style);
-
-        // Default to following system theme (None), only force dark when explicitly set
-        let theme = if window_config.dark_mode {
-            Some(Theme::Dark)
-        } else {
-            None // Follow system theme
-        };
         window_builder = window_builder.theme(theme);
     }
 
     // Windows and Linux: set data_directory before proxy_url
     #[cfg(not(target_os = "macos"))]
     {
-        window_builder = window_builder.data_directory(_data_dir).theme(None);
+        window_builder = window_builder.data_directory(_data_dir).theme(theme);
 
         if !config.proxy_url.is_empty() {
             if let Ok(proxy_url) = Url::from_str(&config.proxy_url) {
@@ -453,7 +467,7 @@ fn build_window(
                             })
                             .unwrap_or_else(|| "download".to_string());
 
-                        let target = download_dir.join(filename);
+                        let target = download_dir.join(sanitize_download_filename(&filename));
                         if let Some(path_str) = target.to_str() {
                             *destination = PathBuf::from(check_file_or_append(path_str));
                         }

@@ -70,7 +70,7 @@ pake [url] [options]
 
 ### [options]
 
-您可以通过传递以下选项来定制打包过程。以下是最常用的选项：
+您可以通过传递以下选项来定制打包过程。`pake --help` 展示全部支持的 CLI 选项。本文档是完整参考。
 
 | 选项               | 描述                                 | 示例                                           |
 | ------------------ | ------------------------------------ | ---------------------------------------------- |
@@ -80,6 +80,8 @@ pake [url] [options]
 | `--height`         | 窗口高度（默认：780px）              | `--height 900`                                 |
 | `--hide-title-bar` | 沉浸式标题栏（仅macOS）              | `--hide-title-bar`                             |
 | `--debug`          | 启用开发者工具                       | `--debug`                                      |
+| `--help`           | 显示全部 CLI 选项                    | `--help`                                       |
+| `--version`        | 显示 CLI 版本                        | `--version`                                    |
 
 完整选项请参见下面的详细说明：
 
@@ -156,7 +158,7 @@ pake https://github.com --name GitHub
 
 #### [zoom]
 
-设置初始页面缩放级别（50-200），默认为 `100`。用户仍可通过快捷键（`Cmd/Ctrl +/-/0`）调整。
+设置初始页面缩放级别，取值为 50 到 200 之间的整数，默认为 `100`。用户仍可通过快捷键（`Cmd/Ctrl +/-/0`）调整。
 
 ```shell
 --zoom <number>
@@ -214,11 +216,13 @@ pake https://github.com --name GitHub
 
 #### [dark-mode]
 
-强制 Mac 打包应用使用黑暗模式，默认为 `false`。
+强制打包应用使用黑暗模式（支持 macOS、Windows 和 Linux），默认为 `false`。
 
 ```shell
 --dark-mode
 ```
+
+在 Linux 上黑暗模式经由 WebKitGTK 实现，页面是否真正渲染为暗色还取决于 WebKitGTK 是否尊重窗口主题以及站点是否实现了 `prefers-color-scheme: dark`。
 
 #### [disabled-web-shortcuts]
 
@@ -258,6 +262,19 @@ pake https://github.com --name GitHub
 --internal-url-regex "^https://(app|api)\\.example\\.com"
 ```
 
+#### [safe-domain]
+
+更简单地把可信域名及其子域名保留在应用内打开。适合工作区回调和企业 SSO 登录流程，例如 Slack 加 Okta。Pake 会把这个列表编译成 `internal_url_regex`；如果同时设置了 `--internal-url-regex`，则以显式正则为准。
+
+`--safe-domain` 只匹配 URL 的 host，不会因为路径或查询参数里出现域名就误判为内部链接。
+
+```shell
+--safe-domain <domains>
+
+# 将 Slack 和 Okta 的认证跳转保留在应用内
+--safe-domain slack.com,okta.com
+```
+
 #### [multi-arch]
 
 设置打包结果同时支持 Intel 和 M1 芯片，仅适用于 macOS，默认为 `false`。
@@ -287,9 +304,9 @@ pake https://github.com --name GitHub
 
 指定构建目标架构或格式：
 
-- **Linux**: `deb`, `appimage`, `rpm`, `zst`, `deb-arm64`, `appimage-arm64`, `rpm-arm64`, `zst-arm64`（默认：`deb`, `appimage`）
+- **Linux**: `deb`, `appimage`, `rpm`, `zst`, `deb-arm64`, `appimage-arm64`, `rpm-arm64`, `zst-arm64`（默认：按发行版自适应，Debian/Ubuntu 为 `deb, appimage`，Fedora/RHEL/Oracle/Rocky/Alma/openSUSE 为 `rpm, appimage`）
 - **Windows**: `x64`, `arm64`（未指定时自动检测）
-- **macOS**: `intel`, `apple`, `universal`（未指定时自动检测）
+- **macOS**: `intel`, `apple`, `universal`（架构，未指定时自动检测）；`app`, `dmg`（输出格式，默认：`dmg`）
 
 ```shell
 --targets <target>
@@ -300,6 +317,8 @@ pake https://github.com --name GitHub
 --targets universal      # macOS 通用版本（Intel + Apple Silicon）
 --targets apple          # 仅 macOS Apple Silicon
 --targets intel          # 仅 macOS Intel
+--targets app            # 仅 macOS 应用包（.app，跳过 DMG 步骤）
+--targets dmg            # macOS DMG 安装包（默认）
 --targets deb            # Linux DEB 包（x64）
 --targets rpm            # Linux RPM 包（x64）
 --targets appimage       # Linux AppImage（x64）
@@ -316,6 +335,16 @@ pake https://github.com --name GitHub
 - ARM64 支持让 Pake 应用可以在基于 ARM 的 Linux 设备上运行，包括 Linux 手机（postmarketOS、Ubuntu Touch）、树莓派和其他 ARM64 Linux 系统。
 - 使用 `--target appimage-arm64` 可以创建便携式 ARM64 应用，在不同的 ARM64 Linux 发行版上运行。
 - 在基于 Arch Linux 的发行版上使用 `--targets zst` 可直接生成 `.pkg.tar.zst` 包。Pake 会按 Tauri 的 AUR 打包说明先生成 Linux 包内容，再写入 Arch 包元数据并输出 zstd 压缩包。需要预先安装 `binutils`（提供 `ar`）和 `libarchive`（提供 `bsdtar`）。
+
+#### [no-bundle]
+
+跳过打包，只输出编译好的可执行文件。仅 Linux 可用。适用于 Fedora、RHEL、Oracle Linux 等 RPM 系发行版，这些系统上原生打包器可能在打包阶段中止，用此选项仍能拿到可运行的二进制。
+
+```shell
+pake https://github.com --name GitHub --no-bundle
+```
+
+裸可执行文件会复制到当前目录，命名为 `<name>-binary`。在非 Linux 平台此选项会被忽略。
 
 #### [user-agent]
 
@@ -445,6 +474,28 @@ pake https://github.com --name GitHub --keep-binary
 pake https://github.com --name GitHub --install
 ```
 
+#### [camera]
+
+在 macOS 上为打包应用请求摄像头权限，会添加 `com.apple.security.device.camera` entitlement。默认为 `false`。仅适用于 macOS，在 Windows 和 Linux 上会被忽略。适用于需要访问摄像头的网页应用，例如视频通话或扫码。
+
+```shell
+--camera
+
+# 示例：为视频通话站点打包并开启摄像头权限
+pake https://meet.google.com --name Meet --camera
+```
+
+#### [microphone]
+
+在 macOS 上为打包应用请求麦克风权限，会添加 `com.apple.security.device.audio-input` entitlement。默认为 `false`。仅适用于 macOS，在 Windows 和 Linux 上会被忽略。
+
+```shell
+--microphone
+
+# 示例：为会议类应用同时开启摄像头和麦克风权限
+pake https://meet.google.com --name Meet --camera --microphone
+```
+
 #### [multi-instance]
 
 允许打包后的应用同时运行多个实例。默认为 `false`，此时再次启动只会聚焦已有窗口。启用该选项后，可以同时打开同一个应用的多个窗口。
@@ -545,6 +596,42 @@ pake ./my-app/index.html --name "my-app" --use-local-file
 
 ```shell
 --new-window
+```
+
+#### [show-toolbar]
+
+显示一个紧凑的页面内工具栏，包含后退、前进、刷新、主页、复制链接和浏览器打开按钮（设置 `--translate` 时还会显示翻译按钮）。默认隐藏以保持应用外观。注意：顶部 `position: fixed` 的网站头部可能会被工具栏遮挡。
+
+```shell
+--show-toolbar
+```
+
+#### [translate]
+
+启用“翻译页面”操作（Ctrl/Cmd+T，macOS 还有菜单项，显示工具栏时有翻译按钮）。可传入语言代码，单独使用 `--translate` 默认翻译为英文。
+
+该功能通过 Google 的 `translate.goog` 代理重新加载页面——这是 URL 重写方案，并非 WebView 内置翻译（任何系统 WebView 都没有提供内置翻译 API）。适用于公开页面，但不适用于需要登录的页面，因为代理由 Google 服务器抓取页面内容。
+
+```shell
+--translate          # 默认 en
+--translate ja
+```
+
+#### [external-links]
+
+控制跨域链接（`target="_blank"`、`window.open`、弹窗）的打开位置：`browser`（默认——系统浏览器）或 `window`（新的应用窗口，与主窗口共享会话/Cookie）。`window` 模式会自动启用 `--new-window`。
+
+```shell
+--external-links window
+```
+
+#### [adblock]
+
+使用一份精选的域名列表拦截常见的广告/追踪请求（默认关闭）。这是轻量级的 JS 请求拦截，不是内容过滤引擎或完整的浏览器级拦截器。`--adblock-strict` 会在基础广告域名列表之上，额外拦截 Google Analytics、GTM、Facebook Pixel、Hotjar 等分析/追踪像素域名。
+
+```shell
+--adblock
+--adblock-strict
 ```
 
 ### 打包完成

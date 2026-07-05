@@ -46,12 +46,12 @@ pub fn set_system_tray(
                 open_additional_window_safe(app);
             }
             "hide_app" => {
-                if let Some(window) = app.get_webview_window("pake") {
+                if let Some(window) = app.get_window("pake") {
                     let _ = window.minimize();
                 }
             }
             "show_app" => {
-                if let Some(window) = app.get_webview_window("pake") {
+                if let Some(window) = app.get_window("pake") {
                     let _ = window.show();
                     #[cfg(target_os = "linux")]
                     if _init_fullscreen && !window.is_fullscreen().unwrap_or(false) {
@@ -61,15 +61,20 @@ pub fn set_system_tray(
                 }
             }
             "quit" => {
-                let _ = app.save_window_state(StateFlags::all());
+                let flags = if _init_fullscreen {
+                    StateFlags::all()
+                } else {
+                    StateFlags::all() & !StateFlags::FULLSCREEN
+                };
+                let _ = app.save_window_state(flags);
                 app.exit(0);
             }
             _ => (),
         })
-        .on_tray_icon_event(move |tray, event| match event {
-            TrayIconEvent::Click { button, .. } => {
+        .on_tray_icon_event(move |tray, event| {
+            if let TrayIconEvent::Click { button, .. } = event {
                 if button == tauri::tray::MouseButton::Left {
-                    if let Some(window) = tray.app_handle().get_webview_window("pake") {
+                    if let Some(window) = tray.app_handle().get_window("pake") {
                         let is_visible = window.is_visible().unwrap_or(false);
                         if is_visible {
                             let _ = window.hide();
@@ -84,7 +89,6 @@ pub fn set_system_tray(
                     }
                 }
             }
-            _ => {}
         });
 
     let resolved_icon = if tray_icon_path.is_empty() {
@@ -140,7 +144,7 @@ pub fn set_global_shortcut(
                     *last_triggered = Instant::now();
 
                     if shortcut_hotkey.eq(event) {
-                        if let Some(window) = app.get_webview_window("pake") {
+                        if let Some(window) = app.get_window("pake") {
                             let is_visible = window.is_visible().unwrap_or(false);
                             if is_visible {
                                 let _ = window.hide();

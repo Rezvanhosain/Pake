@@ -3,7 +3,7 @@ import fsExtra from 'fs-extra';
 import logger from '@/options/logger';
 
 import { handleIcon } from './icon';
-import { getDomain } from '@/utils/url';
+import { getDomain, safeDomainsToRegex } from '@/utils/url';
 import {
   promptText,
   capitalizeFirstLetter,
@@ -85,6 +85,17 @@ export default async function handleOptions(
     name: resolvedName,
     identifier: resolveIdentifier(url, options.name, options.identifier),
   };
+
+  // --safe-domain is sugar over --internal-url-regex; an explicit regex wins.
+  if (!options.internalUrlRegex && options.safeDomain) {
+    appOptions.internalUrlRegex = safeDomainsToRegex(options.safeDomain);
+  }
+
+  // --no-bundle is Linux-only; keep normal packaging on other platforms.
+  if (appOptions.bundle === false && platform !== 'linux') {
+    logger.warn('✼ --no-bundle is only supported on Linux; ignoring it.');
+    appOptions.bundle = true;
+  }
 
   const iconPath = await handleIcon(appOptions, url);
   appOptions.icon = iconPath || '';

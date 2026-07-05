@@ -3,12 +3,14 @@
 exports[`buildWindowConfigOverrides > matches the default snapshot on Linux 1`] = `
 {
   "activation_shortcut": "",
+  "adblock_mode": "",
   "always_on_top": false,
   "dark_mode": false,
   "disabled_web_shortcuts": false,
   "enable_drag_drop": false,
   "enable_find": false,
   "enable_wasm": false,
+  "external_links_in_window": false,
   "force_internal_navigation": false,
   "fullscreen": false,
   "height": 780,
@@ -22,8 +24,10 @@ exports[`buildWindowConfigOverrides > matches the default snapshot on Linux 1`] 
   "min_width": 0,
   "new_window": false,
   "resizable": true,
+  "show_toolbar": false,
   "start_to_tray": false,
   "title": undefined,
+  "translation_target": "",
   "width": 1200,
   "zoom": 100,
 }
@@ -32,12 +36,14 @@ exports[`buildWindowConfigOverrides > matches the default snapshot on Linux 1`] 
 exports[`buildWindowConfigOverrides > matches the default snapshot on Windows 1`] = `
 {
   "activation_shortcut": "",
+  "adblock_mode": "",
   "always_on_top": false,
   "dark_mode": false,
   "disabled_web_shortcuts": false,
   "enable_drag_drop": false,
   "enable_find": false,
   "enable_wasm": false,
+  "external_links_in_window": false,
   "force_internal_navigation": false,
   "fullscreen": false,
   "height": 780,
@@ -51,8 +57,10 @@ exports[`buildWindowConfigOverrides > matches the default snapshot on Windows 1`
   "min_width": 0,
   "new_window": false,
   "resizable": true,
+  "show_toolbar": false,
   "start_to_tray": false,
   "title": undefined,
+  "translation_target": "",
   "width": 1200,
   "zoom": 100,
 }
@@ -61,12 +69,14 @@ exports[`buildWindowConfigOverrides > matches the default snapshot on Windows 1`
 exports[`buildWindowConfigOverrides > matches the default snapshot on macOS 1`] = `
 {
   "activation_shortcut": "",
+  "adblock_mode": "",
   "always_on_top": false,
   "dark_mode": false,
   "disabled_web_shortcuts": false,
   "enable_drag_drop": false,
   "enable_find": false,
   "enable_wasm": false,
+  "external_links_in_window": false,
   "force_internal_navigation": false,
   "fullscreen": false,
   "height": 780,
@@ -80,8 +90,10 @@ exports[`buildWindowConfigOverrides > matches the default snapshot on macOS 1`] 
   "min_width": 0,
   "new_window": false,
   "resizable": true,
+  "show_toolbar": false,
   "start_to_tray": false,
   "title": undefined,
+  "translation_target": "",
   "width": 1200,
   "zoom": 100,
 }

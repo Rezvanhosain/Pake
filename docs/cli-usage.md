@@ -70,7 +70,7 @@ The URL is the link to the web page you want to package or the path to a local H
 
 ### [options]
 
-Various options are available for customization. Here are the most commonly used ones:
+Various options are available for customization. `pake --help` shows every supported CLI option. This page is the complete reference.
 
 | Option             | Description                                     | Example                                        |
 | ------------------ | ----------------------------------------------- | ---------------------------------------------- |
@@ -80,6 +80,8 @@ Various options are available for customization. Here are the most commonly used
 | `--height`         | Window height (default: 780px)                  | `--height 900`                                 |
 | `--hide-title-bar` | Immersive header (macOS only)                   | `--hide-title-bar`                             |
 | `--debug`          | Enable development tools                        | `--debug`                                      |
+| `--help`           | Show all CLI options                            | `--help`                                       |
+| `--version`        | Show CLI version                                | `--version`                                    |
 
 For complete options, see detailed sections below.
 
@@ -156,7 +158,7 @@ Set the minimum height that the window can be resized to. Prevents UI breakage c
 
 #### [zoom]
 
-Set initial page zoom level (50-200). Default is `100`. Users can still adjust with `Cmd/Ctrl +/-/0` shortcuts.
+Set initial page zoom level as an integer between 50 and 200. Default is `100`. Users can still adjust with `Cmd/Ctrl +/-/0` shortcuts.
 
 ```shell
 --zoom <number>
@@ -216,11 +218,13 @@ Set the version number of the packaged application to be consistent with the nam
 
 #### [dark-mode]
 
-Force Mac to package applications using dark mode, default is `false`.
+Force packaging applications using dark mode (supports macOS, Windows, and Linux), default is `false`.
 
 ```shell
 --dark-mode
 ```
+
+On Linux this goes through WebKitGTK, so whether a page renders dark also depends on the WebKitGTK build honoring the window theme and the site implementing `prefers-color-scheme: dark`.
 
 #### [disabled-web-shortcuts]
 
@@ -260,6 +264,19 @@ Set a regex pattern to determine which URLs should be considered internal (opene
 --internal-url-regex "^https://(app|api)\\.example\\.com"
 ```
 
+#### [safe-domain]
+
+A simpler way to keep trusted domains and their subdomains inside the app. This is useful for workspace callbacks and enterprise SSO flows, for example Slack plus Okta. Pake compiles this list into `internal_url_regex`; if `--internal-url-regex` is also set, the explicit regex wins.
+
+`--safe-domain` matches URL hosts only, not arbitrary path or query text.
+
+```shell
+--safe-domain <domains>
+
+# Keep Slack and Okta auth redirects inside the app
+--safe-domain slack.com,okta.com
+```
+
 #### [multi-arch]
 
 Package the application to support both Intel and M1 chips, exclusively for macOS. Default is `false`.
@@ -289,9 +306,9 @@ Package the application to support both Intel and M1 chips, exclusively for macO
 
 Specify the build target architecture or format:
 
-- **Linux**: `deb`, `appimage`, `rpm`, `zst`, `deb-arm64`, `appimage-arm64`, `rpm-arm64`, `zst-arm64` (default: `deb`, `appimage`)
+- **Linux**: `deb`, `appimage`, `rpm`, `zst`, `deb-arm64`, `appimage-arm64`, `rpm-arm64`, `zst-arm64` (default: distro-aware, `deb, appimage` on Debian/Ubuntu and `rpm, appimage` on Fedora/RHEL/Oracle/Rocky/Alma/openSUSE)
 - **Windows**: `x64`, `arm64` (auto-detects if not specified)
-- **macOS**: `intel`, `apple`, `universal` (auto-detects if not specified)
+- **macOS**: `intel`, `apple`, `universal` (architecture, auto-detects if not specified); `app`, `dmg` (output format, default: `dmg`)
 
 ```shell
 --targets <target>
@@ -302,6 +319,8 @@ Specify the build target architecture or format:
 --targets universal      # macOS Universal (Intel + Apple Silicon)
 --targets apple          # macOS Apple Silicon only
 --targets intel          # macOS Intel only
+--targets app            # macOS app bundle only (.app, skips the DMG step)
+--targets dmg            # macOS DMG installer (default)
 --targets deb            # Linux DEB package (x64)
 --targets rpm            # Linux RPM package (x64)
 --targets appimage       # Linux AppImage (x64)
@@ -318,6 +337,16 @@ Specify the build target architecture or format:
 - ARM64 support enables Pake apps to run on ARM-based Linux devices, including Linux phones (postmarketOS, Ubuntu Touch), Raspberry Pi, and other ARM64 Linux systems.
 - Use `--target appimage-arm64` for portable ARM64 applications that work across different ARM64 Linux distributions.
 - Use `--targets zst` on Arch Linux based distributions to produce a `.pkg.tar.zst` package directly. Pake follows Tauri's AUR packaging guidance by building the Linux package payload first, then emitting Arch package metadata and zstd-compressed output. Requires `binutils` (for `ar`) and `libarchive` (for `bsdtar`).
+
+#### [no-bundle]
+
+Skip packaging and output only the compiled executable. Linux only. Useful on RPM-based distros (Fedora, RHEL, Oracle Linux, etc.) where the native bundler can abort during the packaging stage, so you still get a runnable binary.
+
+```shell
+pake https://github.com --name GitHub --no-bundle
+```
+
+The raw executable is copied to the current directory as `<name>-binary`. On platforms other than Linux this flag is ignored.
 
 #### [user-agent]
 
@@ -447,6 +476,28 @@ This option is macOS-only and is intended for local development or quick testing
 pake https://github.com --name GitHub --install
 ```
 
+#### [camera]
+
+Request camera access on macOS by adding the `com.apple.security.device.camera` entitlement to the packaged app. Default is `false`. macOS only; ignored on Windows and Linux. Useful for web apps that need webcam access, such as video calls or QR scanning.
+
+```shell
+--camera
+
+# Example: Package a video-call site with camera access
+pake https://meet.google.com --name Meet --camera
+```
+
+#### [microphone]
+
+Request microphone access on macOS by adding the `com.apple.security.device.audio-input` entitlement to the packaged app. Default is `false`. macOS only; ignored on Windows and Linux.
+
+```shell
+--microphone
+
+# Example: Combine camera and microphone for a conferencing app
+pake https://meet.google.com --name Meet --camera --microphone
+```
+
 #### [multi-instance]
 
 Allow the packaged app to run more than one instance at the same time. Default is `false`, which means launching a second instance simply focuses the existing window. Enable this when you need to open several windows of the same app simultaneously.
@@ -548,6 +599,70 @@ This can help sites that rely on popup auth windows, but it does not guarantee i
 ```shell
 --new-window
 ```
+
+#### [show-toolbar]
+
+Show a compact in-page toolbar with Back, Forward, Reload, Home, Copy URL, and Open in Browser controls (plus Translate when `--translate` is set). Hidden by default so packaged apps stay app-like. Note: sites with a `position: fixed` header pinned to the top may render underneath the bar.
+
+```shell
+--show-toolbar
+```
+
+#### [translate]
+
+Enable a "Translate Page" action (Ctrl/Cmd+T, plus a macOS menu item and a toolbar button when the toolbar is shown). Pass a language code or use `--translate` alone for English.
+
+This reloads the page through Google's `translate.goog` proxy — it is a URL-rewrite fallback, not built-in webview translation (no system webview exposes one). It works for public pages but not for pages behind a login, since the proxy fetches the page from Google's servers.
+
+```shell
+--translate          # defaults to en
+--translate ja
+```
+
+#### [external-links]
+
+Control where cross-origin links (`target="_blank"`, `window.open`, popups) open: `browser` (default — the system browser) or `window` (a new app window that shares the app's session/cookies). `window` mode implies `--new-window`.
+
+```shell
+--external-links window
+```
+
+#### [adblock]
+
+Block common ad/tracker requests using a small curated hostname list (off by default). This is lightweight JS-level request blocking, not a cosmetic filter engine or full extension-style blocker. `--adblock-strict` adds analytics/tracking-pixel hosts (Google Analytics, GTM, Facebook Pixel, Hotjar, etc.) on top of the basic ad-serving list.
+
+```shell
+--adblock
+--adblock-strict
+```
+
+#### [tabs]
+
+Open multiple pages in the same app window using a browser-style tab bar (Windows-first, off by default). When enabled, the app shell hosts a lightweight tab strip above the content area. Each tab is an independent webview that shares the same session and cookies.
+
+**Tab interactions:**
+- **New tab**: click the `+` button in the tab bar, or press `Ctrl+T`
+- **Switch tab**: click any tab tile
+- **Close tab**: click `✕` on a tab tile, or middle-click the tile
+- **Open link in new tab**: right-click a link → "Open link in new tab"; or middle-click a link; or Ctrl+click a link
+
+```shell
+--tabs
+```
+
+**Example:**
+
+```shell
+pake https://youtube.com --name "YouTube" --tabs
+```
+
+**How it works (5 lines):**
+
+1. One native Tauri window (`src-tauri/src/app/tabs.rs`) hosts a `paketabs://` tab-strip webview pinned to the top 44 px.
+2. Each tab is a content webview added via the `unstable` `Window::add_child` API; only the active one is shown.
+3. All content webviews share one data directory → shared cookies/session across tabs and restarts.
+4. Rust owns the tab list and pushes it to the strip via the `tabs-state` event; strip/pages call back with async `tab_new`/`tab_switch`/`tab_close`/`tab_report` commands.
+5. The strip is a separate webview (not DOM-injected chrome), so it never clips sites that use `position:fixed` mastheads (e.g. YouTube).
 
 ### Packaging Complete
 

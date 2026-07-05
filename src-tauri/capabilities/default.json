@@ -2,9 +2,17 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "pake-capability",
   "description": "Capability for the pake app.",
-  "webviews": ["pake"],
+  "local": true,
+  "windows": ["pake", "pake-*"],
+  "webviews": ["pake", "pake-*"],
   "remote": {
-    "urls": ["https://*.*"]
+    "urls": [
+      "https://*.*",
+      "http://paketabs.localhost",
+      "http://paketabs.localhost/*",
+      "paketabs://localhost",
+      "paketabs://localhost/*"
+    ]
   },
   "permissions": [
     "shell:allow-open",
@@ -18,6 +26,7 @@
     "core:window:allow-minimize",
     "core:window:allow-close",
     "core:webview:allow-internal-toggle-devtools",
+    "core:event:default",
     "notification:allow-is-permission-granted",
     "notification:allow-notify",
     "notification:allow-get-active",

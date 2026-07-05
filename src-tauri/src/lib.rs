@@ -16,13 +16,16 @@ const PAKE_LINUX_WEBKIT_SAFE_MODE: &str = "PAKE_LINUX_WEBKIT_SAFE_MODE";
 const WEBKIT_DISABLE_DMABUF_RENDERER: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
 #[cfg(target_os = "linux")]
 const WEBKIT_DISABLE_COMPOSITING_MODE: &str = "WEBKIT_DISABLE_COMPOSITING_MODE";
+#[cfg(target_os = "linux")]
+const GDK_BACKEND: &str = "GDK_BACKEND";
 
 use app::{
     invoke::{
-        clear_cache_and_restart, clear_dock_badge, download_file, increment_dock_badge,
-        send_notification, set_dock_badge, set_dock_badge_label, update_theme_mode,
+        clear_dock_badge, download_file, increment_dock_badge, send_notification, set_dock_badge,
+        set_dock_badge_label, set_zoom, update_theme_mode,
     },
     setup::{set_global_shortcut, set_system_tray},
+    tabs::{tab_close, tab_new, tab_ready, tab_report, tab_switch},
     window::{open_additional_window_safe, set_window, MultiWindowState},
 };
 use util::get_pake_config;
@@ -66,6 +69,34 @@ fn should_enable_linux_webkit_safe_mode_from_values(
     !is_niri_session
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn should_force_wayland_gdk_backend(
+    gdk_backend: Option<&str>,
+    wayland_display: Option<&str>,
+    display: Option<&str>,
+) -> bool {
+    // Respect an explicit user choice.
+    if is_non_empty_env_value(gdk_backend) {
+        return false;
+    }
+
+    // On pure Wayland compositors without XWayland (e.g. Niri), $DISPLAY is unset
+    // and GTK defaults to the X11 backend, which aborts with "Failed to initialize
+    // GTK". Wayland is then the only viable backend, so forcing it is safe.
+    is_non_empty_env_value(wayland_display) && !is_non_empty_env_value(display)
+}
+
+#[cfg(target_os = "linux")]
+fn apply_linux_gdk_backend() {
+    if should_force_wayland_gdk_backend(
+        std::env::var(GDK_BACKEND).ok().as_deref(),
+        std::env::var("WAYLAND_DISPLAY").ok().as_deref(),
+        std::env::var("DISPLAY").ok().as_deref(),
+    ) {
+        std::env::set_var(GDK_BACKEND, "wayland");
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn apply_linux_webkit_runtime_flags() {
     let safe_mode = std::env::var(PAKE_LINUX_WEBKIT_SAFE_MODE).ok();
@@ -103,7 +134,10 @@ fn apply_linux_webkit_runtime_flags() {
 
 pub fn run_app() {
     #[cfg(target_os = "linux")]
-    apply_linux_webkit_runtime_flags();
+    {
+        apply_linux_gdk_backend();
+        apply_linux_webkit_runtime_flags();
+    }
 
     let (pake_config, tauri_config) = get_pake_config();
     let tauri_app = tauri::Builder::default();
@@ -122,7 +156,9 @@ pub fn run_app() {
             StateFlags::FULLSCREEN
         } else {
             // Prevent flickering on the first open.
-            StateFlags::all() & !StateFlags::VISIBLE
+            // Exclude FULLSCREEN so a prior --fullscreen build's persisted state
+            // doesn't force fullscreen on a rebuild without --fullscreen.
+            StateFlags::all() & !StateFlags::VISIBLE & !StateFlags::FULLSCREEN
         })
         .build();
 
@@ -141,7 +177,7 @@ pub fn run_app() {
             move |app, _args, _cwd| {
                 if multi_window {
                     open_additional_window_safe(app);
-                } else if let Some(window) = app.get_webview_window("pake") {
+                } else if let Some(window) = app.get_window("pake") {
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -151,6 +187,15 @@ pub fn run_app() {
     }
 
     app_builder
+        .register_uri_scheme_protocol(app::tabs::CHROME_SCHEME, |_ctx, _request| {
+            tauri::http::Response::builder()
+                .header("Content-Type", "text/html")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(app::tabs::CHROME_HTML.as_bytes().to_vec())
+                .unwrap_or_else(|_| {
+                    tauri::http::Response::new(app::tabs::CHROME_HTML.as_bytes().to_vec())
+                })
+        })
         .invoke_handler(tauri::generate_handler![
             download_file,
             send_notification,
@@ -159,7 +204,12 @@ pub fn run_app() {
             set_dock_badge_label,
             clear_dock_badge,
             update_theme_mode,
-            clear_cache_and_restart,
+            set_zoom,
+            tab_ready,
+            tab_new,
+            tab_switch,
+            tab_close,
+            tab_report,
         ])
         .setup(move |app| {
             app.manage(MultiWindowState::new(
@@ -178,6 +228,24 @@ pub fn run_app() {
                 });
             }
             // --- Menu Construction End ---
+
+            let tabs_mode = pake_config.windows[0].tabs;
+
+            if tabs_mode {
+                // Same-window tab mode: one native window hosting a tab strip
+                // plus per-tab content webviews (see app::tabs). Handles its own
+                // window creation and show.
+                app::tabs::setup_tabbed_window(app.app_handle(), &pake_config, &tauri_config)?;
+                set_system_tray(
+                    app.app_handle(),
+                    show_system_tray,
+                    &pake_config.system_tray_path,
+                    init_fullscreen,
+                    multi_window,
+                )?;
+                set_global_shortcut(app.app_handle(), activation_shortcut, init_fullscreen)?;
+                return Ok(());
+            }
 
             let window = set_window(app.app_handle(), &pake_config, &tauri_config)?;
             set_system_tray(
@@ -328,5 +396,46 @@ mod tests {
                 "expected {value} to disable safe mode"
             );
         }
+    }
+
+    #[test]
+    fn forces_wayland_backend_on_pure_wayland() {
+        assert!(should_force_wayland_gdk_backend(
+            None,
+            Some("wayland-0"),
+            None
+        ));
+    }
+
+    #[test]
+    fn forces_wayland_backend_when_display_is_blank() {
+        assert!(should_force_wayland_gdk_backend(
+            None,
+            Some("wayland-0"),
+            Some("   ")
+        ));
+    }
+
+    #[test]
+    fn keeps_default_backend_when_x11_display_present() {
+        assert!(!should_force_wayland_gdk_backend(
+            None,
+            Some("wayland-0"),
+            Some(":0")
+        ));
+    }
+
+    #[test]
+    fn keeps_default_backend_without_wayland_display() {
+        assert!(!should_force_wayland_gdk_backend(None, None, None));
+    }
+
+    #[test]
+    fn respects_explicit_gdk_backend_override() {
+        assert!(!should_force_wayland_gdk_backend(
+            Some("x11"),
+            Some("wayland-0"),
+            None
+        ));
     }
 }
