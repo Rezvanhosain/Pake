@@ -64,6 +64,7 @@ export function buildWindowConfigOverrides(
     translation_target: options.translate === true ? 'en' : options.translate,
     external_links_in_window: options.externalLinks === 'window',
     adblock_mode: options.adblockStrict ? 'strict' : options.adblock ? 'basic' : '',
+    tabs: options.tabs,
   };
 }
 

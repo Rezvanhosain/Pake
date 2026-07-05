@@ -566,6 +566,7 @@ function buildWindowConfigOverrides(options, platform = asSupportedPlatform(proc
         translation_target: options.translate === true ? 'en' : options.translate,
         external_links_in_window: options.externalLinks === 'window',
         adblock_mode: options.adblockStrict ? 'strict' : options.adblock ? 'basic' : '',
+        tabs: options.tabs,
     };
 }
 function asSupportedPlatform(platform) {
@@ -2787,6 +2788,7 @@ const DEFAULT_PAKE_OPTIONS = {
     externalLinks: 'browser',
     adblock: false,
     adblockStrict: false,
+    tabs: false,
 };
 
 function validateNumberInput(value) {
@@ -2979,6 +2981,9 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .hideHelp())
         .addOption(new Option('--adblock-strict', 'Like --adblock, also blocking common analytics/tracking-pixel hosts')
         .default(DEFAULT_PAKE_OPTIONS.adblockStrict)
+        .hideHelp())
+        .addOption(new Option('--tabs', 'Enable same-window browser tabs (tab strip with shared session/cookies)')
+        .default(DEFAULT_PAKE_OPTIONS.tabs)
         .hideHelp())
         .version(packageJson.version, '-v, --version')
         .configureHelp({

@@ -62,4 +62,5 @@ export const DEFAULT_PAKE_OPTIONS: PakeCliOptions = {
   externalLinks: 'browser',
   adblock: false,
   adblockStrict: false,
+  tabs: false,
 };

@@ -160,6 +160,9 @@ export interface PakeCliOptions {
 
   // Adds analytics/tracking-pixel hosts on top of the basic ad-serving list
   adblockStrict: boolean;
+
+  // Same-window browser tabs (tab strip + shared-session content webviews)
+  tabs: boolean;
 }
 
 export interface PakeAppOptions extends PakeCliOptions {
@@ -203,6 +206,7 @@ export interface WindowConfig {
   translation_target: string;
   external_links_in_window: boolean;
   adblock_mode: string;
+  tabs: boolean;
 }
 
 export interface PakeConfig {

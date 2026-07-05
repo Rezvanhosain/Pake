@@ -327,6 +327,14 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .default(DEFAULT.adblockStrict)
         .hideHelp(),
     )
+    .addOption(
+      new Option(
+        '--tabs',
+        'Enable same-window browser tabs (tab strip with shared session/cookies)',
+      )
+        .default(DEFAULT.tabs)
+        .hideHelp(),
+    )
     .version(packageJson.version, '-v, --version')
     .configureHelp({
       sortSubcommands: true,

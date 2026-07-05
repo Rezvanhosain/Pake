@@ -8,7 +8,15 @@ const shortcuts = {
   r: () => window.location.reload(),
   h: () => pakeGoHome(),
   l: () => navigator.clipboard.writeText(window.location.href),
-  t: () => pakeTranslate(),
+  t: () => {
+    // In tabbed mode Ctrl/Cmd+T opens a new tab (browser convention);
+    // otherwise it keeps the Translate action.
+    if (window.pakeConfig?.tabs === true) {
+      window.__TAURI__?.core?.invoke("tab_new", {});
+    } else {
+      pakeTranslate();
+    }
+  },
   n: () =>
     window.pakeOpenInNewWindow &&
     window.pakeOpenInNewWindow(window.location.href),
@@ -861,6 +869,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // windows are not enabled, so the control still does something useful.
   function pakeOpenInNewWindow(url) {
     if (!url) return;
+    // Tabbed mode: open the URL as a new in-app tab in the same window.
+    if (window.pakeConfig?.tabs === true) {
+      const tabInvoke = window.__TAURI__?.core?.invoke;
+      if (tabInvoke) {
+        tabInvoke("tab_new", { url });
+        return;
+      }
+    }
     if (window.pakeConfig?.new_window === true) {
       originalWindowOpen.call(window, url, "_blank");
     } else {
@@ -914,6 +930,7 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadFile: isChinese ? "下载文件" : "Download File",
     copyAddress: isChinese ? "复制地址" : "Copy Address",
     openInBrowser: isChinese ? "浏览器打开" : "Open in Browser",
+    openInNewTab: isChinese ? "在新标签页打开链接" : "Open link in new tab",
   };
 
   // Menu theme configuration
@@ -1169,6 +1186,14 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
 
       case "link":
+        // Tabbed mode: offer "Open link in new tab" as the first action.
+        if (window.pakeConfig?.tabs === true) {
+          items.push(
+            createMenuItem(menuTexts.openInNewTab, () =>
+              window.pakeOpenInNewWindow(data.url),
+            ),
+          );
+        }
         if (data.isFile) {
           items.push(
             createMenuItem(menuTexts.downloadFile, () => {

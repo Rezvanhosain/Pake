@@ -44,6 +44,8 @@ pub struct WindowConfig {
     pub external_links_in_window: bool,
     #[serde(default)]
     pub adblock_mode: String,
+    #[serde(default)]
+    pub tabs: bool,
 }
 
 fn default_zoom() -> u32 {

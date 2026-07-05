@@ -25,6 +25,7 @@ use app::{
         set_dock_badge_label, set_zoom, update_theme_mode,
     },
     setup::{set_global_shortcut, set_system_tray},
+    tabs::{tab_close, tab_new, tab_ready, tab_report, tab_switch},
     window::{open_additional_window_safe, set_window, MultiWindowState},
 };
 use util::get_pake_config;
@@ -176,7 +177,7 @@ pub fn run_app() {
             move |app, _args, _cwd| {
                 if multi_window {
                     open_additional_window_safe(app);
-                } else if let Some(window) = app.get_webview_window("pake") {
+                } else if let Some(window) = app.get_window("pake") {
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -195,6 +196,11 @@ pub fn run_app() {
             clear_dock_badge,
             update_theme_mode,
             set_zoom,
+            tab_ready,
+            tab_new,
+            tab_switch,
+            tab_close,
+            tab_report,
         ])
         .setup(move |app| {
             app.manage(MultiWindowState::new(
@@ -213,6 +219,24 @@ pub fn run_app() {
                 });
             }
             // --- Menu Construction End ---
+
+            let tabs_mode = pake_config.windows[0].tabs;
+
+            if tabs_mode {
+                // Same-window tab mode: one native window hosting a tab strip
+                // plus per-tab content webviews (see app::tabs). Handles its own
+                // window creation and show.
+                app::tabs::setup_tabbed_window(app.app_handle(), &pake_config, &tauri_config)?;
+                set_system_tray(
+                    app.app_handle(),
+                    show_system_tray,
+                    &pake_config.system_tray_path,
+                    init_fullscreen,
+                    multi_window,
+                )?;
+                set_global_shortcut(app.app_handle(), activation_shortcut, init_fullscreen)?;
+                return Ok(());
+            }
 
             let window = set_window(app.app_handle(), &pake_config, &tauri_config)?;
             set_system_tray(
