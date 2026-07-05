@@ -86,12 +86,19 @@
     });
   }
 
-  document.addEventListener(
-    "beforescriptexecute",
-    (e) => {
-      const src = e.target?.src;
-      if (src && isBlocked(src)) e.preventDefault();
-    },
-    true,
-  );
+  // Catches src set via setAttribute() or parsed straight out of HTML, which
+  // bypass the property-setter override above (createElement + `.src =`).
+  function purgeIfBlocked(node) {
+    if (node.nodeType !== 1) return;
+    const tag = node.tagName;
+    if (tag === "SCRIPT" || tag === "IMG" || tag === "IFRAME") {
+      const src = node.getAttribute && node.getAttribute("src");
+      if (src && isBlocked(src)) node.remove();
+    }
+  }
+  new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) purgeIfBlocked(node);
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
 })();
