@@ -250,7 +250,15 @@ fn emit_state(app: &AppHandle) {
         tabs: model.tabs.clone(),
         active: model.active.clone(),
     };
-    let _ = app.emit("tabs-state", payload);
+    eprintln!(
+        "[Pake][tabs] emit tabs-state: {} tab(s), active={}",
+        payload.tabs.len(),
+        payload.active
+    );
+    match app.emit("tabs-state", payload) {
+        Ok(_) => {}
+        Err(e) => eprintln!("[Pake][tabs] emit ERROR: {e}"),
+    }
 }
 
 // Create a new content tab, add it to the window, make it active, and record it.
@@ -285,7 +293,13 @@ fn spawn_tab(app: &AppHandle, url: String) -> tauri::Result<String> {
     )?;
 
     let (lw, lh) = window_logical_size(&window);
-    window.add_child(builder, content_position(), content_size(lw, lh))?;
+    match window.add_child(builder, content_position(), content_size(lw, lh)) {
+        Ok(_) => eprintln!("[Pake][tabs] add_child ok label={label} size={lw}x{lh}"),
+        Err(e) => {
+            eprintln!("[Pake][tabs] add_child ERROR label={label}: {e}");
+            return Err(e);
+        }
+    }
 
     {
         let state = app.state::<TabsState>();
@@ -385,6 +399,7 @@ pub fn setup_tabbed_window(
 
 #[tauri::command]
 pub fn tab_ready(app: AppHandle) {
+    eprintln!("[Pake][tabs] tab_ready invoked");
     emit_state(&app);
 }
 
@@ -396,7 +411,11 @@ pub fn tab_new(app: AppHandle, url: Option<String>) {
             let state = app.state::<MultiWindowState>();
             home_url(&state.pake_config)
         });
-    let _ = spawn_tab(&app, target);
+    eprintln!("[Pake][tabs] tab_new invoked url={target}");
+    match spawn_tab(&app, target) {
+        Ok(label) => eprintln!("[Pake][tabs] tab_new ok label={label}"),
+        Err(e) => eprintln!("[Pake][tabs] tab_new ERROR: {e}"),
+    }
 }
 
 #[tauri::command]
