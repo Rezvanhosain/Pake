@@ -25,9 +25,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::webview::{DownloadEvent, WebviewBuilder};
 use tauri::window::WindowBuilder;
-use tauri::{
-    AppHandle, Config, Emitter, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl,
-};
+use tauri::{AppHandle, Config, Emitter, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl};
 
 pub const SHELL_LABEL: &str = "pake";
 pub const CHROME_LABEL: &str = "pake-chrome";
@@ -96,15 +94,12 @@ fn content_builder<'a>(
     label: &str,
     url: WebviewUrl,
 ) -> tauri::Result<WebviewBuilder<tauri::Wry>> {
-    let window_config = config
-        .windows
-        .first()
-        .ok_or_else(|| {
-            tauri::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "pake.json must define at least one window configuration",
-            ))
-        })?;
+    let window_config = config.windows.first().ok_or_else(|| {
+        tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "pake.json must define at least one window configuration",
+        ))
+    })?;
 
     let package_name = tauri_config
         .product_name
@@ -384,12 +379,10 @@ pub fn tab_ready(app: AppHandle) {
 // sync command (which blocks the loop) would deadlock.
 #[tauri::command]
 pub async fn tab_new(app: AppHandle, url: Option<String>) {
-    let target = url
-        .filter(|u| !u.trim().is_empty())
-        .unwrap_or_else(|| {
-            let state = app.state::<MultiWindowState>();
-            home_url(&state.pake_config)
-        });
+    let target = url.filter(|u| !u.trim().is_empty()).unwrap_or_else(|| {
+        let state = app.state::<MultiWindowState>();
+        home_url(&state.pake_config)
+    });
     if let Err(e) = spawn_tab(&app, target) {
         eprintln!("[Pake][tabs] failed to open tab: {e}");
     }

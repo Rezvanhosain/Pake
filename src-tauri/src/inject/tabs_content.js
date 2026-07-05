@@ -6,7 +6,8 @@
   if (window.pakeConfig && window.pakeConfig.tabs !== true) return;
 
   function report() {
-    const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    const invoke =
+      window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
     const label = window.__PAKE_TAB_LABEL__;
     if (!invoke || !label) return;
     invoke("tab_report", {

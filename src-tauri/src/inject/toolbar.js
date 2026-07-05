@@ -11,8 +11,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const invoke = window.__TAURI__?.core?.invoke;
   const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const c = dark
-    ? { bg: "rgba(35,35,35,.92)", fg: "#e8e8e8", bd: "rgba(255,255,255,.12)", hv: "rgba(255,255,255,.14)" }
-    : { bg: "rgba(250,250,250,.92)", fg: "#222", bd: "rgba(0,0,0,.12)", hv: "rgba(0,0,0,.08)" };
+    ? {
+        bg: "rgba(35,35,35,.92)",
+        fg: "#e8e8e8",
+        bd: "rgba(255,255,255,.12)",
+        hv: "rgba(255,255,255,.14)",
+      }
+    : {
+        bg: "rgba(250,250,250,.92)",
+        fg: "#222",
+        bd: "rgba(0,0,0,.12)",
+        hv: "rgba(0,0,0,.08)",
+      };
 
   const bar = document.createElement("div");
   bar.id = "pake-toolbar";
@@ -39,7 +49,10 @@ document.addEventListener("DOMContentLoaded", () => {
       line-height: 1; padding: 0;
     `;
     btn.addEventListener("mouseenter", () => (btn.style.background = c.hv));
-    btn.addEventListener("mouseleave", () => (btn.style.background = "transparent"));
+    btn.addEventListener(
+      "mouseleave",
+      () => (btn.style.background = "transparent"),
+    );
     btn.addEventListener("click", onClick);
     bar.appendChild(btn);
     return btn;
@@ -55,8 +68,12 @@ document.addEventListener("DOMContentLoaded", () => {
   addButton("→", "Forward", () => window.history.forward());
   addButton("⟳", "Reload", () => window.location.reload());
   addButton("⌂", "Home", () => window.pakeGoHome && window.pakeGoHome());
-  addButton("⊞", "Open current page in a new window", () =>
-    window.pakeOpenInNewWindow && window.pakeOpenInNewWindow(window.location.href),
+  addButton(
+    "⊞",
+    "Open current page in a new window",
+    () =>
+      window.pakeOpenInNewWindow &&
+      window.pakeOpenInNewWindow(window.location.href),
   );
   addSeparator();
   addButton("⧉", "Copy URL", () => {

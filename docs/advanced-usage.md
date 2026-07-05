@@ -82,14 +82,14 @@ Pake apps ship a small set of browser controls without becoming a browser:
 
 **Keyboard shortcuts** (Ctrl on Windows/Linux, Cmd on macOS, unless `--disabled-web-shortcuts`):
 
-| Shortcut     | Action                                                          |
-| ------------ | --------------------------------------------------------------- |
-| `Ctrl/Cmd+[` | Back                                                            |
-| `Ctrl/Cmd+]` | Forward                                                         |
-| `Ctrl/Cmd+R` | Reload                                                          |
-| `Ctrl/Cmd+H` | Home (configured start URL; macOS: use `Cmd+Shift+H` menu item) |
-| `Ctrl/Cmd+L` | Copy current URL                                                |
-| `Ctrl/Cmd+T` | Translate page (only when `--translate` is set)                 |
+| Shortcut     | Action                                                              |
+| ------------ | ------------------------------------------------------------------- |
+| `Ctrl/Cmd+[` | Back                                                                |
+| `Ctrl/Cmd+]` | Forward                                                             |
+| `Ctrl/Cmd+R` | Reload                                                              |
+| `Ctrl/Cmd+H` | Home (configured start URL; macOS: use `Cmd+Shift+H` menu item)     |
+| `Ctrl/Cmd+L` | Copy current URL                                                    |
+| `Ctrl/Cmd+T` | Translate page (only when `--translate` is set)                     |
 | `Ctrl/Cmd+N` | Open the current page in a new in-app window (needs `--new-window`) |
 
 On macOS these also appear in the native menu bar (Navigation menu: Back, Forward, Go Home, Open in Default Browser, Translate Page). Windows and Linux have no native menu bar; use the shortcuts or the optional toolbar (`--show-toolbar`).
@@ -99,7 +99,7 @@ On macOS these also appear in the native menu bar (Navigation menu: Back, Forwar
 **Multi-window / open-in-new-window** (all require `--new-window`, which is what turns popups into real secondary windows):
 
 - **`Ctrl/Cmd`-click or middle-click any link** → opens it in a new in-app window. This is how you keep several videos/pages open at once (e.g. middle-click several YouTube thumbnails).
-- **Toolbar "⊞" button / `Ctrl/Cmd+N`** → opens the *current* page in a new in-app window.
+- **Toolbar "⊞" button / `Ctrl/Cmd+N`** → opens the _current_ page in a new in-app window.
 - **`window.open` popups** (login/OAuth flows, video pop-outs) become real secondary app windows.
 - **Cross-origin `target="_blank"` links** open in the system browser by default; `--external-links window` opens them as app windows instead.
 - All in-app windows share the same session and cookies (same data directory), so logging in once applies across windows.

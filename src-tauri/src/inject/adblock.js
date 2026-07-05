@@ -34,14 +34,13 @@
     "fullstory.com",
     "clarity.ms",
   ];
-  const hosts = mode === "strict" ? BASIC_HOSTS.concat(STRICT_HOSTS) : BASIC_HOSTS;
+  const hosts =
+    mode === "strict" ? BASIC_HOSTS.concat(STRICT_HOSTS) : BASIC_HOSTS;
 
   function isBlocked(url) {
     try {
       const hostname = new URL(url, window.location.href).hostname;
-      return hosts.some(
-        (h) => hostname === h || hostname.endsWith("." + h),
-      );
+      return hosts.some((h) => hostname === h || hostname.endsWith("." + h));
     } catch {
       return false;
     }
@@ -70,11 +69,12 @@
   // Catch script/img/iframe tags loaded straight from parsed HTML, not just
   // JS-initiated requests, without needing a MutationObserver on every node.
   for (const tag of ["script", "img", "iframe"]) {
-    const proto = tag === "script"
-      ? HTMLScriptElement.prototype
-      : tag === "img"
-        ? HTMLImageElement.prototype
-        : HTMLIFrameElement.prototype;
+    const proto =
+      tag === "script"
+        ? HTMLScriptElement.prototype
+        : tag === "img"
+          ? HTMLImageElement.prototype
+          : HTMLIFrameElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(proto, "src");
     if (!descriptor?.set) continue;
     Object.defineProperty(proto, "src", {

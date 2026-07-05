@@ -42,7 +42,8 @@
     document.body.appendChild(bar);
 
     const strip = document.createElement("div");
-    strip.style.cssText = "display:flex;align-items:flex-end;gap:4px;flex:0 0 auto;";
+    strip.style.cssText =
+      "display:flex;align-items:flex-end;gap:4px;flex:0 0 auto;";
     bar.appendChild(strip);
 
     const plus = document.createElement("button");
@@ -50,8 +51,14 @@
     plus.textContent = "+";
     plus.title = "New tab (Ctrl+T)";
     plus.style.cssText = `flex:0 0 auto;border:none;background:transparent;color:${c.fg};font-size:20px;line-height:1;width:32px;height:32px;margin-bottom:2px;border-radius:8px;cursor:pointer;`;
-    plus.addEventListener("mouseenter", () => (plus.style.background = c.hover));
-    plus.addEventListener("mouseleave", () => (plus.style.background = "transparent"));
+    plus.addEventListener(
+      "mouseenter",
+      () => (plus.style.background = c.hover),
+    );
+    plus.addEventListener(
+      "mouseleave",
+      () => (plus.style.background = "transparent"),
+    );
     plus.addEventListener("click", () => invoke("tab_new", {}));
     bar.appendChild(plus);
 
@@ -94,14 +101,22 @@
         close.textContent = "✕";
         close.title = "Close tab";
         close.style.cssText = `flex:0 0 auto;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:11px;color:${c.sub};`;
-        close.addEventListener("mouseenter", () => (close.style.background = c.hover));
-        close.addEventListener("mouseleave", () => (close.style.background = "transparent"));
+        close.addEventListener(
+          "mouseenter",
+          () => (close.style.background = c.hover),
+        );
+        close.addEventListener(
+          "mouseleave",
+          () => (close.style.background = "transparent"),
+        );
         close.addEventListener("click", (e) => {
           e.stopPropagation();
           invoke("tab_close", { label: t.label });
         });
 
-        tab.addEventListener("click", () => invoke("tab_switch", { label: t.label }));
+        tab.addEventListener("click", () =>
+          invoke("tab_switch", { label: t.label }),
+        );
         // Middle-click a tab to close it, matching browser convention.
         tab.addEventListener("auxclick", (e) => {
           if (e.button === 1) invoke("tab_close", { label: t.label });

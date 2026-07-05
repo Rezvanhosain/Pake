@@ -641,6 +641,7 @@ Block common ad/tracker requests using a small curated hostname list (off by def
 Open multiple pages in the same app window using a browser-style tab bar (Windows-first, off by default). When enabled, the app shell hosts a lightweight tab strip above the content area. Each tab is an independent webview that shares the same session and cookies.
 
 **Tab interactions:**
+
 - **New tab**: click the `+` button in the tab bar, or press `Ctrl+T`
 - **Switch tab**: click any tab tile
 - **Close tab**: click `✕` on a tab tile, or middle-click the tile

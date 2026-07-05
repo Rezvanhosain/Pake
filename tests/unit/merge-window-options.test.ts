@@ -166,9 +166,9 @@ describe('buildWindowConfigOverrides', () => {
   });
 
   it('derives adblock_mode from adblock/adblockStrict flags', () => {
-    expect(buildWindowConfigOverrides(makeOptions(), 'win32').adblock_mode).toBe(
-      '',
-    );
+    expect(
+      buildWindowConfigOverrides(makeOptions(), 'win32').adblock_mode,
+    ).toBe('');
     expect(
       buildWindowConfigOverrides(makeOptions({ adblock: true }), 'win32')
         .adblock_mode,
