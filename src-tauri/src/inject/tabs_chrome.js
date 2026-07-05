@@ -111,8 +111,11 @@
       });
     }
 
-    listen("tabs-state", (event) => render(event.payload));
-    invoke("tab_ready", {});
+    // Register the listener BEFORE asking for state, so the initial push is
+    // never missed to a listen()-registration race.
+    Promise.resolve(listen("tabs-state", (event) => render(event.payload)))
+      .then(() => invoke("tab_ready", {}))
+      .catch(() => invoke("tab_ready", {}));
   }
 
   if (document.readyState === "loading") {

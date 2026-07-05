@@ -3,6 +3,7 @@
   "identifier": "pake-capability",
   "description": "Capability for the pake app.",
   "local": true,
+  "windows": ["pake", "pake-*"],
   "webviews": ["pake", "pake-*"],
   "remote": {
     "urls": ["https://*.*"]
