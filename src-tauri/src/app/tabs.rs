@@ -31,7 +31,15 @@ use tauri::{
 
 pub const SHELL_LABEL: &str = "pake";
 pub const CHROME_LABEL: &str = "pake-chrome";
+pub const CHROME_SCHEME: &str = "paketabs";
 const TAB_BAR_HEIGHT: f64 = 44.0;
+
+// The tab-strip page. Served from a custom `paketabs://` scheme (a local
+// origin the app capability covers) rather than a data: URL, because a data:
+// URL's opaque origin is not covered by any capability, which disables its
+// Tauri IPC (invoke/listen) entirely. The strip's logic lives in the injected
+// tabs_chrome.js initialization script.
+pub const CHROME_HTML: &str = r#"<!doctype html><html><head><meta charset="utf-8"><title>tabs</title></head><body></body></html>"#;
 
 #[derive(Clone, serde::Serialize)]
 pub struct TabInfo {
@@ -55,41 +63,19 @@ struct TabsStatePayload {
     active: String,
 }
 
-// Minimal base64 encoder so the tab-strip HTML can be handed to WebView2 as a
-// clean `data:text/html;base64,...` URL without pulling in a new crate or
-// hand-rolling percent-encoding.
-fn base64(input: &[u8]) -> String {
-    const TABLE: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
-    for chunk in input.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
-        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        out.push(TABLE[((n >> 18) & 63) as usize] as char);
-        out.push(TABLE[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 {
-            TABLE[((n >> 6) & 63) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            TABLE[(n & 63) as usize] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
-
 fn chrome_url() -> WebviewUrl {
-    let html = r#"<!doctype html><html><head><meta charset="utf-8"><title>tabs</title></head><body></body></html>"#;
-    let data = format!("data:text/html;base64,{}", base64(html.as_bytes()));
-    // A data: URL always parses; fall back to about:blank only in the
-    // impossible case that it does not.
-    let url = Url::parse(&data).unwrap_or_else(|_| Url::parse("about:blank").unwrap());
-    WebviewUrl::External(url)
+    // Served by the `paketabs` custom URI scheme registered in lib.rs. On
+    // Windows the scheme resolves as `http://paketabs.localhost/`.
+    let candidates = [
+        format!("{CHROME_SCHEME}://localhost/"),
+        format!("http://{CHROME_SCHEME}.localhost/"),
+    ];
+    for candidate in candidates {
+        if let Ok(url) = Url::parse(&candidate) {
+            return WebviewUrl::External(url);
+        }
+    }
+    WebviewUrl::External(Url::parse("about:blank").unwrap())
 }
 
 fn home_url(config: &PakeConfig) -> String {

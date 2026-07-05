@@ -6,7 +6,13 @@
   "windows": ["pake", "pake-*"],
   "webviews": ["pake", "pake-*"],
   "remote": {
-    "urls": ["https://*.*"]
+    "urls": [
+      "https://*.*",
+      "http://paketabs.localhost",
+      "http://paketabs.localhost/*",
+      "paketabs://localhost",
+      "paketabs://localhost/*"
+    ]
   },
   "permissions": [
     "shell:allow-open",

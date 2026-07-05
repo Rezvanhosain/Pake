@@ -187,6 +187,15 @@ pub fn run_app() {
     }
 
     app_builder
+        .register_uri_scheme_protocol(app::tabs::CHROME_SCHEME, |_ctx, _request| {
+            tauri::http::Response::builder()
+                .header("Content-Type", "text/html")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(app::tabs::CHROME_HTML.as_bytes().to_vec())
+                .unwrap_or_else(|_| {
+                    tauri::http::Response::new(app::tabs::CHROME_HTML.as_bytes().to_vec())
+                })
+        })
         .invoke_handler(tauri::generate_handler![
             download_file,
             send_notification,
