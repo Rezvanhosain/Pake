@@ -27,6 +27,7 @@ tauri = { version = "2.10.2", features = [
   "image-png",
   "macos-proxy",
   "unstable",
+  "webview-data-url",
 ] }
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-oauth = "2.0.0"
