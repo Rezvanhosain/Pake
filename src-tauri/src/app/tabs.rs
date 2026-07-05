@@ -389,8 +389,11 @@ pub fn tab_ready(app: AppHandle) {
     emit_state(&app);
 }
 
+// Async so it runs off the main thread: add_child creates a WebView2
+// controller asynchronously and needs the event loop to keep pumping, which a
+// sync command (which blocks the loop) would deadlock.
 #[tauri::command]
-pub fn tab_new(app: AppHandle, url: Option<String>) {
+pub async fn tab_new(app: AppHandle, url: Option<String>) {
     let target = url
         .filter(|u| !u.trim().is_empty())
         .unwrap_or_else(|| {
@@ -405,7 +408,7 @@ pub fn tab_new(app: AppHandle, url: Option<String>) {
 }
 
 #[tauri::command]
-pub fn tab_switch(app: AppHandle, label: String) {
+pub async fn tab_switch(app: AppHandle, label: String) {
     {
         let state = app.state::<TabsState>();
         let mut model = state.0.lock().unwrap();
@@ -418,7 +421,7 @@ pub fn tab_switch(app: AppHandle, label: String) {
 }
 
 #[tauri::command]
-pub fn tab_close(app: AppHandle, label: String) {
+pub async fn tab_close(app: AppHandle, label: String) {
     // Close the underlying webview.
     if let Some(window) = app.get_window(SHELL_LABEL) {
         if let Some(webview) = window.webviews().into_iter().find(|w| w.label() == label) {
