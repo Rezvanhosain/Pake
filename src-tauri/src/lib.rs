@@ -24,6 +24,7 @@ use app::{
         clear_dock_badge, download_file, increment_dock_badge, send_notification, set_dock_badge,
         set_dock_badge_label, set_zoom, update_theme_mode,
     },
+    session::{session_get_restore, session_set_restore},
     setup::{set_global_shortcut, set_system_tray},
     tabs::{tab_close, tab_new, tab_ready, tab_report, tab_switch},
     window::{open_additional_window_safe, set_window, MultiWindowState},
@@ -210,6 +211,8 @@ pub fn run_app() {
             tab_switch,
             tab_close,
             tab_report,
+            session_get_restore,
+            session_set_restore,
         ])
         .setup(move |app| {
             app.manage(MultiWindowState::new(
@@ -323,6 +326,12 @@ pub fn run_app() {
             std::process::exit(1);
         })
         .run(|_app, _event| {
+            // Persist the tab session synchronously on a normal shutdown, on top
+            // of the debounced saves that already run after each tab change.
+            if let tauri::RunEvent::ExitRequested { .. } = _event {
+                app::session::save_now(_app);
+            }
+
             // Handle macOS dock icon click to reopen hidden window
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {

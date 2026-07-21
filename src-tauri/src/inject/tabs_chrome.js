@@ -42,7 +42,8 @@
     document.body.appendChild(bar);
 
     const strip = document.createElement("div");
-    strip.style.cssText = "display:flex;align-items:flex-end;gap:4px;flex:0 0 auto;";
+    strip.style.cssText =
+      "display:flex;align-items:flex-end;gap:4px;flex:0 0 auto;";
     bar.appendChild(strip);
 
     const plus = document.createElement("button");
@@ -50,10 +51,49 @@
     plus.textContent = "+";
     plus.title = "New tab (Ctrl+T)";
     plus.style.cssText = `flex:0 0 auto;border:none;background:transparent;color:${c.fg};font-size:20px;line-height:1;width:32px;height:32px;margin-bottom:2px;border-radius:8px;cursor:pointer;`;
-    plus.addEventListener("mouseenter", () => (plus.style.background = c.hover));
-    plus.addEventListener("mouseleave", () => (plus.style.background = "transparent"));
+    plus.addEventListener(
+      "mouseenter",
+      () => (plus.style.background = c.hover),
+    );
+    plus.addEventListener(
+      "mouseleave",
+      () => (plus.style.background = "transparent"),
+    );
     plus.addEventListener("click", () => invoke("tab_new", {}));
     bar.appendChild(plus);
+
+    // "Restore previous session on startup" toggle. Pushed to the right edge of
+    // the strip. Reflects the persisted setting and flips it on click.
+    const gear = document.createElement("button");
+    gear.type = "button";
+    gear.textContent = "⟳";
+    gear.style.cssText = `flex:0 0 auto;margin-left:auto;border:none;background:transparent;color:${c.fg};font-size:16px;line-height:1;width:32px;height:32px;margin-bottom:2px;border-radius:8px;cursor:pointer;`;
+    gear.addEventListener(
+      "mouseenter",
+      () => (gear.style.background = c.hover),
+    );
+    gear.addEventListener(
+      "mouseleave",
+      () => (gear.style.background = "transparent"),
+    );
+    let restoreOn = true;
+    function paintGear() {
+      gear.style.opacity = restoreOn ? "1" : "0.4";
+      gear.title =
+        "Restore previous session on startup: " + (restoreOn ? "On" : "Off");
+    }
+    Promise.resolve(invoke("session_get_restore", {}))
+      .then((v) => {
+        restoreOn = !!v;
+        paintGear();
+      })
+      .catch(() => paintGear());
+    gear.addEventListener("click", () => {
+      restoreOn = !restoreOn;
+      paintGear();
+      invoke("session_set_restore", { enabled: restoreOn });
+    });
+    bar.appendChild(gear);
 
     function faviconFor(url) {
       try {
@@ -94,14 +134,22 @@
         close.textContent = "✕";
         close.title = "Close tab";
         close.style.cssText = `flex:0 0 auto;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:11px;color:${c.sub};`;
-        close.addEventListener("mouseenter", () => (close.style.background = c.hover));
-        close.addEventListener("mouseleave", () => (close.style.background = "transparent"));
+        close.addEventListener(
+          "mouseenter",
+          () => (close.style.background = c.hover),
+        );
+        close.addEventListener(
+          "mouseleave",
+          () => (close.style.background = "transparent"),
+        );
         close.addEventListener("click", (e) => {
           e.stopPropagation();
           invoke("tab_close", { label: t.label });
         });
 
-        tab.addEventListener("click", () => invoke("tab_switch", { label: t.label }));
+        tab.addEventListener("click", () =>
+          invoke("tab_switch", { label: t.label }),
+        );
         // Middle-click a tab to close it, matching browser convention.
         tab.addEventListener("auxclick", (e) => {
           if (e.button === 1) invoke("tab_close", { label: t.label });
