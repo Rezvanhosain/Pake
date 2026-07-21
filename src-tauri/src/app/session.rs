@@ -9,7 +9,7 @@
 // history. Writes are atomic (temp file + rename) and debounced so bursty tab
 // activity does not thrash the disk.
 
-use crate::app::tabs::{TabsState, SHELL_LABEL};
+use crate::app::tabs::TabsState;
 use crate::util::get_data_dir;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -110,13 +110,14 @@ pub fn is_restorable_url(url: &str) -> bool {
     )
 }
 
+fn package_name(app: &AppHandle) -> String {
+    app.try_state::<crate::app::window::MultiWindowState>()
+        .and_then(|s| s.tauri_config.product_name.clone())
+        .unwrap_or_else(|| "pake".to_string())
+}
+
 fn manage_dir(app: &AppHandle) -> Option<PathBuf> {
-    let package_name = app
-        .config()
-        .product_name
-        .clone()
-        .unwrap_or_else(|| "pake".to_string());
-    get_data_dir(app, package_name).ok()
+    get_data_dir(app, package_name(app)).ok()
 }
 
 // Register SessionState. Idempotent-ish: only the first call installs state.
@@ -280,10 +281,6 @@ pub fn session_set_restore(app: AppHandle, enabled: bool) {
     if enabled {
         save_now(&app);
     }
-}
-
-pub fn shell_window_is(label: &str) -> bool {
-    label == SHELL_LABEL
 }
 
 #[cfg(test)]

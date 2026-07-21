@@ -62,12 +62,87 @@
     plus.addEventListener("click", () => invoke("tab_new", {}));
     bar.appendChild(plus);
 
-    // "Restore previous session on startup" toggle. Pushed to the right edge of
-    // the strip. Reflects the persisted setting and flips it on click.
+    const btnBase = `flex:0 0 auto;border:none;background:transparent;color:${c.fg};font-size:16px;line-height:1;width:32px;height:32px;margin-bottom:2px;border-radius:8px;cursor:pointer;`;
+    function hoverable(btn) {
+      btn.addEventListener(
+        "mouseenter",
+        () => (btn.style.background = c.hover),
+      );
+      btn.addEventListener(
+        "mouseleave",
+        () => (btn.style.background = "transparent"),
+      );
+    }
+
+    // The active tab's URL/title, tracked from tabs-state, so the star can
+    // bookmark or un-bookmark the current page.
+    let activeTab = null;
+
+    // Star: toggle bookmark for the active page. Internal pages (tab strip,
+    // bookmark manager) are not bookmarkable, so the star is disabled for them.
+    const star = document.createElement("button");
+    star.type = "button";
+    star.style.cssText = "margin-left:auto;" + btnBase;
+    hoverable(star);
+    function isBookmarkable(url) {
+      return /^(https?|file):/i.test(url || "");
+    }
+    function paintStar(on) {
+      star.textContent = on ? "★" : "☆";
+      const usable = activeTab && isBookmarkable(activeTab.url);
+      star.style.opacity = usable ? "1" : "0.35";
+      star.title = !usable
+        ? "This page can't be bookmarked"
+        : on
+          ? "Remove bookmark"
+          : "Bookmark this page";
+    }
+    function refreshStar() {
+      if (!activeTab || !isBookmarkable(activeTab.url)) {
+        paintStar(false);
+        return;
+      }
+      Promise.resolve(invoke("bookmark_is", { url: activeTab.url }))
+        .then((v) => paintStar(!!v))
+        .catch(() => paintStar(false));
+    }
+    star.addEventListener("click", async () => {
+      if (!activeTab || !isBookmarkable(activeTab.url)) return;
+      try {
+        const on = await invoke("bookmark_is", { url: activeTab.url });
+        if (on) {
+          await invoke("bookmark_remove_url", { url: activeTab.url });
+        } else {
+          await invoke("bookmark_add", {
+            url: activeTab.url,
+            title: activeTab.title || "",
+          });
+        }
+      } catch (e) {
+        /* ignore */
+      }
+      refreshStar();
+    });
+    bar.appendChild(star);
+
+    // Open the bookmark manager in a new tab.
+    const bmBtn = document.createElement("button");
+    bmBtn.type = "button";
+    bmBtn.textContent = "📑";
+    bmBtn.title = "Bookmarks";
+    bmBtn.style.cssText = btnBase;
+    hoverable(bmBtn);
+    bmBtn.addEventListener("click", () =>
+      invoke("tab_new", { url: "pakebookmarks://localhost/" }),
+    );
+    bar.appendChild(bmBtn);
+
+    // "Restore previous session on startup" toggle. Reflects the persisted
+    // setting and flips it on click.
     const gear = document.createElement("button");
     gear.type = "button";
     gear.textContent = "⟳";
-    gear.style.cssText = `flex:0 0 auto;margin-left:auto;border:none;background:transparent;color:${c.fg};font-size:16px;line-height:1;width:32px;height:32px;margin-bottom:2px;border-radius:8px;cursor:pointer;`;
+    gear.style.cssText = btnBase;
     gear.addEventListener(
       "mouseenter",
       () => (gear.style.background = c.hover),
@@ -108,6 +183,8 @@
       strip.innerHTML = "";
       const tabs = (state && state.tabs) || [];
       const active = (state && state.active) || "";
+      activeTab = tabs.find((t) => t.label === active) || null;
+      refreshStar();
       tabs.forEach((t) => {
         const isActive = t.label === active;
         const tab = document.createElement("div");

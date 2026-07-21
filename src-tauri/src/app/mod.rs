@@ -1,3 +1,4 @@
+pub mod bookmarks;
 pub mod config;
 pub mod invoke;
 #[cfg(target_os = "macos")]

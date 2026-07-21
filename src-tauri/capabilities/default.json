@@ -11,7 +11,11 @@
       "http://paketabs.localhost",
       "http://paketabs.localhost/*",
       "paketabs://localhost",
-      "paketabs://localhost/*"
+      "paketabs://localhost/*",
+      "http://pakebookmarks.localhost",
+      "http://pakebookmarks.localhost/*",
+      "pakebookmarks://localhost",
+      "pakebookmarks://localhost/*"
     ]
   },
   "permissions": [

@@ -1,0 +1,259 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bookmarks</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #202124;
+        --sub: #5f6368;
+        --card: #f1f3f4;
+        --border: #dadce0;
+        --accent: #1a73e8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #202124;
+          --fg: #e8eaed;
+          --sub: #9aa0a6;
+          --card: #303134;
+          --border: #3c4043;
+          --accent: #8ab4f8;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        background: var(--bg);
+        padding: 16px 20px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 10px;
+      }
+      #search {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--card);
+        color: var(--fg);
+        font-size: 14px;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 8px 12px 40px;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+      }
+      li:hover {
+        background: var(--card);
+      }
+      .meta {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .title {
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .title:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+      .url {
+        color: var(--sub);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      button {
+        flex: 0 0 auto;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+        border-radius: 7px;
+        padding: 5px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--card);
+      }
+      .empty {
+        color: var(--sub);
+        padding: 40px 20px;
+        text-align: center;
+      }
+      input.edit {
+        width: 100%;
+        padding: 6px 8px;
+        margin: 2px 0;
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--fg);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Bookmarks</h1>
+      <input id="search" type="search" placeholder="Search by title or URL…" />
+    </header>
+    <ul id="list"></ul>
+    <script>
+      (function () {
+        function boot() {
+          const tauri = window.__TAURI__;
+          if (!tauri) {
+            setTimeout(boot, 30);
+            return;
+          }
+          const invoke = tauri.core.invoke;
+          const list = document.getElementById("list");
+          const search = document.getElementById("search");
+          let all = [];
+
+          function open(url) {
+            invoke("tab_new", { url: url });
+          }
+
+          async function refresh() {
+            try {
+              all = (await invoke("bookmark_list", {})) || [];
+            } catch (e) {
+              all = [];
+            }
+            render();
+          }
+
+          function matches(b, q) {
+            if (!q) return true;
+            q = q.toLowerCase();
+            return (
+              (b.title || "").toLowerCase().includes(q) ||
+              (b.url || "").toLowerCase().includes(q)
+            );
+          }
+
+          function render() {
+            const q = search.value.trim();
+            const items = all.filter((b) => matches(b, q));
+            list.innerHTML = "";
+            if (items.length === 0) {
+              const li = document.createElement("li");
+              li.className = "empty";
+              li.textContent = all.length
+                ? "No bookmarks match your search."
+                : "No bookmarks yet. Use the ★ in the tab bar to add one.";
+              list.appendChild(li);
+              return;
+            }
+            items.forEach((b) => list.appendChild(row(b)));
+          }
+
+          function row(b) {
+            const li = document.createElement("li");
+            const meta = document.createElement("div");
+            meta.className = "meta";
+            const title = document.createElement("div");
+            title.className = "title";
+            title.textContent = b.title || b.url;
+            title.title = "Open in a new tab";
+            title.addEventListener("click", () => open(b.url));
+            const url = document.createElement("div");
+            url.className = "url";
+            url.textContent = b.url;
+            meta.appendChild(title);
+            meta.appendChild(url);
+
+            const openBtn = document.createElement("button");
+            openBtn.textContent = "Open";
+            openBtn.addEventListener("click", () => open(b.url));
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "Edit";
+            editBtn.addEventListener("click", () => edit(li, b));
+            const delBtn = document.createElement("button");
+            delBtn.textContent = "Delete";
+            delBtn.addEventListener("click", async () => {
+              await invoke("bookmark_remove", { id: b.id });
+              refresh();
+            });
+
+            li.appendChild(meta);
+            li.appendChild(openBtn);
+            li.appendChild(editBtn);
+            li.appendChild(delBtn);
+            return li;
+          }
+
+          function edit(li, b) {
+            li.innerHTML = "";
+            const meta = document.createElement("div");
+            meta.className = "meta";
+            const t = document.createElement("input");
+            t.className = "edit";
+            t.value = b.title || "";
+            t.placeholder = "Title";
+            const u = document.createElement("input");
+            u.className = "edit";
+            u.value = b.url || "";
+            u.placeholder = "URL";
+            meta.appendChild(t);
+            meta.appendChild(u);
+            const save = document.createElement("button");
+            save.textContent = "Save";
+            save.addEventListener("click", async () => {
+              try {
+                await invoke("bookmark_update", {
+                  id: b.id,
+                  title: t.value,
+                  url: u.value,
+                });
+                refresh();
+              } catch (e) {
+                alert(String(e));
+              }
+            });
+            const cancel = document.createElement("button");
+            cancel.textContent = "Cancel";
+            cancel.addEventListener("click", render);
+            li.appendChild(meta);
+            li.appendChild(save);
+            li.appendChild(cancel);
+          }
+
+          search.addEventListener("input", render);
+          refresh();
+        }
+        boot();
+      })();
+    </script>
+  </body>
+</html>

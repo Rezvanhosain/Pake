@@ -362,6 +362,7 @@ pub fn setup_tabbed_window(
     // Restore the previous session when enabled and a valid one exists;
     // otherwise fall back to the normal single home tab.
     crate::app::session::init(app);
+    crate::app::bookmarks::init(app);
     match crate::app::session::load_for_restore(app) {
         Some(session) => {
             crate::app::session::set_restoring(app, true);

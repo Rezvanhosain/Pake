@@ -20,6 +20,10 @@ const WEBKIT_DISABLE_COMPOSITING_MODE: &str = "WEBKIT_DISABLE_COMPOSITING_MODE";
 const GDK_BACKEND: &str = "GDK_BACKEND";
 
 use app::{
+    bookmarks::{
+        bookmark_add, bookmark_is, bookmark_list, bookmark_remove, bookmark_remove_url,
+        bookmark_update,
+    },
     invoke::{
         clear_dock_badge, download_file, increment_dock_badge, send_notification, set_dock_badge,
         set_dock_badge_label, set_zoom, update_theme_mode,
@@ -197,6 +201,15 @@ pub fn run_app() {
                     tauri::http::Response::new(app::tabs::CHROME_HTML.as_bytes().to_vec())
                 })
         })
+        .register_uri_scheme_protocol(app::bookmarks::MANAGER_SCHEME, |_ctx, _request| {
+            tauri::http::Response::builder()
+                .header("Content-Type", "text/html")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(app::bookmarks::MANAGER_HTML.as_bytes().to_vec())
+                .unwrap_or_else(|_| {
+                    tauri::http::Response::new(app::bookmarks::MANAGER_HTML.as_bytes().to_vec())
+                })
+        })
         .invoke_handler(tauri::generate_handler![
             download_file,
             send_notification,
@@ -213,6 +226,12 @@ pub fn run_app() {
             tab_report,
             session_get_restore,
             session_set_restore,
+            bookmark_list,
+            bookmark_is,
+            bookmark_add,
+            bookmark_remove,
+            bookmark_remove_url,
+            bookmark_update,
         ])
         .setup(move |app| {
             app.manage(MultiWindowState::new(
