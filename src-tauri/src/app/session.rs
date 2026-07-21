@@ -308,8 +308,14 @@ mod tests {
     fn active_index_is_clamped_on_load() {
         let data = SessionData {
             tabs: vec![
-                SessionTab { url: "https://a.com".into(), title: "A".into() },
-                SessionTab { url: "https://b.com".into(), title: "B".into() },
+                SessionTab {
+                    url: "https://a.com".into(),
+                    title: "A".into(),
+                },
+                SessionTab {
+                    url: "https://b.com".into(),
+                    title: "B".into(),
+                },
             ],
             active: 9,
         };

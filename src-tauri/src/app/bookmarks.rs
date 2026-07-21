@@ -141,14 +141,21 @@ pub fn bookmark_is(app: AppHandle, url: String) -> bool {
 }
 
 #[tauri::command]
-pub fn bookmark_add(app: AppHandle, url: String, title: Option<String>) -> Result<Bookmark, String> {
+pub fn bookmark_add(
+    app: AppHandle,
+    url: String,
+    title: Option<String>,
+) -> Result<Bookmark, String> {
     if !is_valid_url(&url) {
         return Err("Invalid URL".to_string());
     }
     let state = app
         .try_state::<BookmarksState>()
         .ok_or_else(|| "Bookmarks unavailable".to_string())?;
-    let mut items = state.items.lock().map_err(|_| "lock poisoned".to_string())?;
+    let mut items = state
+        .items
+        .lock()
+        .map_err(|_| "lock poisoned".to_string())?;
 
     let target = normalize_url(&url);
     // Prevent accidental duplicates for the same normalized URL.
@@ -179,10 +186,11 @@ pub fn bookmark_remove(app: AppHandle, id: String) {
     let Some(state) = app.try_state::<BookmarksState>() else {
         return;
     };
-    if let Ok(mut items) = state.items.lock() {
-        items.retain(|b| b.id != id);
-        persist(&state, &items);
-    }
+    let Ok(mut items) = state.items.lock() else {
+        return;
+    };
+    items.retain(|b| b.id != id);
+    persist(&state, &items);
 }
 
 // Remove by URL (used by the tab-strip star to un-bookmark the active page).
@@ -192,10 +200,11 @@ pub fn bookmark_remove_url(app: AppHandle, url: String) {
         return;
     };
     let target = normalize_url(&url);
-    if let Ok(mut items) = state.items.lock() {
-        items.retain(|b| normalize_url(&b.url) != target);
-        persist(&state, &items);
-    }
+    let Ok(mut items) = state.items.lock() else {
+        return;
+    };
+    items.retain(|b| normalize_url(&b.url) != target);
+    persist(&state, &items);
 }
 
 #[tauri::command]
@@ -211,7 +220,10 @@ pub fn bookmark_update(
     let state = app
         .try_state::<BookmarksState>()
         .ok_or_else(|| "Bookmarks unavailable".to_string())?;
-    let mut items = state.items.lock().map_err(|_| "lock poisoned".to_string())?;
+    let mut items = state
+        .items
+        .lock()
+        .map_err(|_| "lock poisoned".to_string())?;
 
     let target = normalize_url(&url);
     // Don't let an edit collide with a different existing bookmark.

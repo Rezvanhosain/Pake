@@ -25,9 +25,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::webview::{DownloadEvent, WebviewBuilder};
 use tauri::window::WindowBuilder;
-use tauri::{
-    AppHandle, Config, Emitter, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl,
-};
+use tauri::{AppHandle, Config, Emitter, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl};
 
 pub const SHELL_LABEL: &str = "pake";
 pub const CHROME_LABEL: &str = "pake-chrome";
@@ -89,22 +87,19 @@ fn home_url(config: &PakeConfig) -> String {
 // Build a content-tab webview builder carrying the same injection chain and
 // browser tuning as a normal single-webview Pake window, plus two tab-only
 // scripts: the tab's own label and the title/URL reporter.
-fn content_builder<'a>(
+fn content_builder(
     app: &AppHandle,
-    config: &'a PakeConfig,
+    config: &PakeConfig,
     tauri_config: &Config,
     label: &str,
     url: WebviewUrl,
 ) -> tauri::Result<WebviewBuilder<tauri::Wry>> {
-    let window_config = config
-        .windows
-        .first()
-        .ok_or_else(|| {
-            tauri::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "pake.json must define at least one window configuration",
-            ))
-        })?;
+    let window_config = config.windows.first().ok_or_else(|| {
+        tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "pake.json must define at least one window configuration",
+        ))
+    })?;
 
     let package_name = tauri_config
         .product_name
@@ -350,7 +345,7 @@ pub fn setup_tabbed_window(
     app.manage(TabsState(Mutex::new(TabsModel::default())));
 
     // Chrome tab strip.
-    let (lw, lh) = window_logical_size(&window);
+    let (lw, _) = window_logical_size(&window);
     let chrome = WebviewBuilder::new(CHROME_LABEL, chrome_url())
         .initialization_script(include_str!("../inject/tabs_chrome.js"));
     window.add_child(
@@ -423,12 +418,10 @@ pub fn tab_ready(app: AppHandle) {
 // sync command (which blocks the loop) would deadlock.
 #[tauri::command]
 pub async fn tab_new(app: AppHandle, url: Option<String>) {
-    let target = url
-        .filter(|u| !u.trim().is_empty())
-        .unwrap_or_else(|| {
-            let state = app.state::<MultiWindowState>();
-            home_url(&state.pake_config)
-        });
+    let target = url.filter(|u| !u.trim().is_empty()).unwrap_or_else(|| {
+        let state = app.state::<MultiWindowState>();
+        home_url(&state.pake_config)
+    });
     if let Err(e) = spawn_tab(&app, target) {
         eprintln!("[Pake][tabs] failed to open tab: {e}");
     }
@@ -478,7 +471,6 @@ pub async fn tab_close(app: AppHandle, label: String) {
         // Never leave the window with zero tabs — open a fresh home tab.
         let state = app.state::<MultiWindowState>();
         let home = home_url(&state.pake_config);
-        drop(state);
         let _ = spawn_tab(&app, home);
         return;
     }

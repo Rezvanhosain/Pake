@@ -137,23 +137,17 @@
     );
     bar.appendChild(bmBtn);
 
-    // "Restore previous session on startup" toggle. Reflects the persisted
-    // setting and flips it on click.
+    // "Restore previous session on startup" — a labelled checkbox toggle rather
+    // than a bare icon, so its purpose is self-evident and not mistaken for a
+    // page-reload button. Reflects the persisted setting and flips it on click.
     const gear = document.createElement("button");
     gear.type = "button";
-    gear.textContent = "⟳";
-    gear.style.cssText = btnBase;
-    gear.addEventListener(
-      "mouseenter",
-      () => (gear.style.background = c.hover),
-    );
-    gear.addEventListener(
-      "mouseleave",
-      () => (gear.style.background = "transparent"),
-    );
+    gear.style.cssText = `flex:0 0 auto;border:none;background:transparent;color:${c.fg};font-size:12px;line-height:1;height:32px;padding:0 10px;margin-bottom:2px;border-radius:8px;cursor:pointer;white-space:nowrap;`;
+    hoverable(gear);
     let restoreOn = true;
     function paintGear() {
-      gear.style.opacity = restoreOn ? "1" : "0.4";
+      gear.textContent = (restoreOn ? "☑" : "☐") + " Restore session";
+      gear.style.opacity = restoreOn ? "1" : "0.6";
       gear.title =
         "Restore previous session on startup: " + (restoreOn ? "On" : "Off");
     }

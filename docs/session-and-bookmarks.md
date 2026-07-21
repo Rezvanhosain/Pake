@@ -12,8 +12,9 @@ owns the tab model (see `src-tauri/src/app/tabs.rs`).
   synchronously on normal shutdown (`RunEvent::ExitRequested`).
 - Only normal `http(s)`/`file` pages are stored/restored; internal pages
   (`paketabs://`, `pakebookmarks://`, `about:`, `data:`) are skipped.
-- Setting **"Restore previous session on startup"** — the `⟳` toggle in the tab
-  strip. Default **on** for tabbed mode. The last good session is still written
+- Setting **"Restore previous session on startup"** — a labelled `☑ Restore
+  session` checkbox toggle in the tab strip (☑ on / ☐ off). Default **on** for
+  tabbed mode. The last good session is still written
   even when the setting is off, so enabling it later behaves sensibly.
 - Malformed/partial session data never crashes startup (treated as "no
   session"); a single bad tab is skipped, not fatal. Saves are suppressed until
