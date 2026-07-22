@@ -9,6 +9,7 @@
 
 import { execSync, spawn } from "child_process";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import ora from "ora";
 import config, { TIMEOUTS, TEST_URLS } from "./config.js";
@@ -18,6 +19,7 @@ class PakeTestRunner {
     this.results = [];
     this.tempFiles = [];
     this.tempDirs = [];
+    this.realBuildTargetDir = null;
   }
 
   async runAll(options = {}) {
@@ -681,6 +683,16 @@ class PakeTestRunner {
       "Complete GitHub.com App Build",
       async () => {
         return new Promise((resolve, reject) => {
+          const targetRoot =
+            process.env.PAKE_TEST_TARGET_ROOT ||
+            (process.platform === "win32" && fs.existsSync("E:\\")
+              ? "E:\\pake-test-target"
+              : os.tmpdir());
+          fs.mkdirSync(targetRoot, { recursive: true });
+          this.realBuildTargetDir = fs.mkdtempSync(
+            path.join(targetRoot, "pake-real-build-"),
+          );
+          this.trackTempDir(this.realBuildTargetDir);
           const testName = "GitHubRealBuild";
           // Platform-specific output files
           const outputFiles = {
@@ -766,6 +778,7 @@ class PakeTestRunner {
             env: {
               ...process.env,
               PAKE_CREATE_APP: "1",
+              CARGO_TARGET_DIR: this.realBuildTargetDir,
             },
           });
 
@@ -1141,6 +1154,15 @@ class PakeTestRunner {
         : []),
       ...(platform === "win32"
         ? [
+            ...(this.realBuildTargetDir
+              ? [
+                  path.join(
+                    this.realBuildTargetDir,
+                    "x86_64-pc-windows-msvc/release/bundle/msi",
+                  ),
+                  path.join(this.realBuildTargetDir, "release/bundle/msi"),
+                ]
+              : []),
             path.join(
               config.PROJECT_ROOT,
               "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi",
@@ -1525,7 +1547,7 @@ const options = {
   builder: !args.includes("--no-builder"),
   pakeCliTests: args.includes("--pake-cli"),
   e2e: args.includes("--e2e"),
-  realBuild: !args.includes("--no-build"), // Always include real build test
+  realBuild: args.includes("--real-build"),
   quick: false,
 };
 
@@ -1537,13 +1559,14 @@ if (args.includes("--help") || args.includes("-h")) {
 Usage: npm test [-- options]
 
 Complete Test Suite (Default):
-  pnpm test                   # Run complete test suite with real build (8-12 minutes)
+  pnpm test                   # Fast test suite; does not create GUI apps
+  pnpm run test:real-build    # Opt-in real build (uses an isolated temporary target)
 
 Test Components:
   [PASS] Unit Tests               # CLI commands, validation, response time
   [PASS] Integration Tests        # Process spawning, file permissions, dependencies
   [PASS] Builder Tests           # Platform detection, architecture, file naming
-  [PASS] Real Build Test         # Complete GitHub.com app build with packaging
+  --real-build   Add complete GitHub.com app build with packaging
 
 Optional Components:
   --e2e          Add end-to-end configuration tests
@@ -1554,12 +1577,11 @@ Skip Components (if needed):
   --no-unit      Skip unit tests
   --no-integration  Skip integration tests
   --no-builder   Skip builder tests
-  --no-build     Skip real build test
 
 Examples:
   npm test                         # Complete test suite (recommended)
-  npm test -- --release           # Run everything including release workflow
-  pnpm test -- --no-build         # Skip real build (faster for development)
+  pnpm test -- --e2e              # Add end-to-end configuration tests
+  pnpm run test:real-build         # Run the opt-in real build
 
 Environment:
   CI=1              # Enable CI mode
@@ -1571,6 +1593,13 @@ Environment:
 
 // Run tests
 const runner = new PakeTestRunner();
+const cleanupAndExit = (code) => {
+  runner.cleanup();
+  process.exit(code);
+};
+
+process.once("SIGINT", () => cleanupAndExit(130));
+process.once("SIGTERM", () => cleanupAndExit(143));
 runner
   .runAll(options)
   .then(async (success) => {
@@ -1596,7 +1625,7 @@ runner
   })
   .catch((error) => {
     console.error("Test runner failed:", error);
-    process.exit(1);
+    cleanupAndExit(1);
   });
 
 export default runner;
