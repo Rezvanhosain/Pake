@@ -9,11 +9,11 @@ Compared against merge-base `8b923d4` … `upstream/main` (`bf0c433`, 31 commits
 Cherry-picked (with `-x`) focused, low-risk fixes that apply cleanly and are
 covered by the existing vitest suite or are self-contained:
 
-| Upstream | Fix |
-| --- | --- |
-| `9a63704` | fall back from malformed saved zoom (inject/event.js) |
-| `ad088e3` | preserve native clipboard formats on paste (inject/event.js) |
-| `783135f` | guard clipboard paste fallback against key-repeat / stale arms |
+| Upstream  | Fix                                                                    |
+| --------- | ---------------------------------------------------------------------- |
+| `9a63704` | fall back from malformed saved zoom (inject/event.js)                  |
+| `ad088e3` | preserve native clipboard formats on paste (inject/event.js)           |
+| `783135f` | guard clipboard paste fallback against key-repeat / stale arms         |
 | `1a6cfa4` | stop duplicate new window when tray + multi-window combined (setup.rs) |
 
 Also refreshed the stale `merge-window-options` snapshot to include the fork's
