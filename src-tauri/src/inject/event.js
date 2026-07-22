@@ -55,25 +55,32 @@ function setZoom(zoom) {
   // CSS hacks. `transform: scale` and `html.style.zoom` break complex SPAs like
   // ChatGPT: the page shifts right on Windows and parts of the UI stop repainting
   // on macOS. Native zoom recalculates layout exactly like a browser does.
+  const zoomPercent = normalizeZoomPercent(zoom);
+  const normalizedZoom = `${zoomPercent}%`;
   const invoke = window.__TAURI__?.core?.invoke;
   if (invoke) {
-    invoke("set_zoom", { percent: parseFloat(zoom) }).catch(() => {});
+    invoke("set_zoom", { percent: zoomPercent }).catch(() => {});
   }
 
-  window.localStorage.setItem("htmlZoom", zoom);
+  window.localStorage.setItem("htmlZoom", normalizedZoom);
 }
 
 function zoomCommon(zoomChange) {
   const currentZoom = window.localStorage.getItem("htmlZoom") || "100%";
-  setZoom(zoomChange(currentZoom));
+  setZoom(zoomChange(normalizeZoomPercent(currentZoom)));
 }
 
 function zoomIn() {
-  zoomCommon((currentZoom) => `${Math.min(parseInt(currentZoom) + 10, 200)}%`);
+  zoomCommon((currentZoom) => `${Math.min(currentZoom + 10, 200)}%`);
 }
 
 function zoomOut() {
-  zoomCommon((currentZoom) => `${Math.max(parseInt(currentZoom) - 10, 30)}%`);
+  zoomCommon((currentZoom) => `${Math.max(currentZoom - 10, 30)}%`);
+}
+
+function normalizeZoomPercent(zoom) {
+  const parsed = parseFloat(zoom);
+  return Number.isFinite(parsed) ? parsed : 100;
 }
 
 let pasteAsPlainTextPending = false;
@@ -196,19 +203,14 @@ function insertTextIntoEditableElement(element, text) {
   return false;
 }
 
-function runBrowserPasteCommand() {
-  try {
-    return document.execCommand("paste") === true;
-  } catch (error) {
-    return false;
-  }
-}
+let clipboardPasteFallbackTarget;
+let clipboardPasteFallbackArmedAt = 0;
+// An armed fallback older than this is a leftover from a keyup the window
+// never saw (alt-tab mid-press); firing it on a later plain "v" keyup would
+// paste unexpectedly.
+const CLIPBOARD_PASTE_FALLBACK_TTL_MS = 5000;
 
 function pasteClipboardText(activeElement) {
-  if (runBrowserPasteCommand()) {
-    return;
-  }
-
   const readText = navigator.clipboard?.readText;
   if (typeof readText !== "function") {
     return;
@@ -251,9 +253,19 @@ function handleClipboardShortcut(event) {
   }
 
   if (key === "v" && canPasteIntoEditableElement(activeElement)) {
-    event.preventDefault();
-    pasteClipboardText(activeElement);
-    return true;
+    // Let the native WebView paste event run first so images, files, and rich
+    // clipboard formats remain intact. If the platform does not emit paste,
+    // keyup applies the existing text-only fallback. Key-repeat must not
+    // re-arm: after a native paste already fired and disarmed the fallback,
+    // a repeat keydown re-arming it would make keyup paste text a second
+    // time. Repeats only refresh the TTL of a still-armed target.
+    if (!event.repeat) {
+      clipboardPasteFallbackTarget = activeElement;
+      clipboardPasteFallbackArmedAt = Date.now();
+    } else if (clipboardPasteFallbackTarget === activeElement) {
+      clipboardPasteFallbackArmedAt = Date.now();
+    }
+    return false;
   }
 
   if (key === "a" && isEditable && selectEditableElement(activeElement)) {
@@ -262,6 +274,44 @@ function handleClipboardShortcut(event) {
   }
 
   return false;
+}
+
+function handleClipboardPasteFallback(event) {
+  if (
+    event.isTrusted !== true ||
+    !isNonMacDesktop() ||
+    event.key?.toLowerCase() !== "v"
+  ) {
+    return false;
+  }
+
+  const activeElement = clipboardPasteFallbackTarget;
+  const armedAt = clipboardPasteFallbackArmedAt;
+  clipboardPasteFallbackTarget = undefined;
+  if (
+    !activeElement ||
+    Date.now() - armedAt > CLIPBOARD_PASTE_FALLBACK_TTL_MS ||
+    document.activeElement !== activeElement ||
+    !canPasteIntoEditableElement(activeElement)
+  ) {
+    return false;
+  }
+
+  pasteClipboardText(activeElement);
+  return true;
+}
+
+function handlePaste(event) {
+  clipboardPasteFallbackTarget = undefined;
+  if (!pasteAsPlainTextPending) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  const text = event.clipboardData?.getData("text/plain") || "";
+  if (text) {
+    document.execCommand("insertText", false, text);
+  }
 }
 
 const DOWNLOADABLE_FILE_EXTENSIONS = {
@@ -579,22 +629,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   document.addEventListener("keydown", handleClipboardShortcut, true);
-
-  document.addEventListener(
-    "paste",
-    (event) => {
-      if (pasteAsPlainTextPending) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-
-        const text = event.clipboardData?.getData("text/plain") || "";
-        if (text) {
-          document.execCommand("insertText", false, text);
-        }
-      }
-    },
-    true,
-  );
+  document.addEventListener("keyup", handleClipboardPasteFallback, true);
+  document.addEventListener("paste", handlePaste, true);
 
   // Trigger a native browser download via a transient anchor click. The Rust
   // on_download handler then writes the file to the Downloads folder. This is

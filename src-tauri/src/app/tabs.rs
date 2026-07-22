@@ -87,9 +87,9 @@ fn home_url(config: &PakeConfig) -> String {
 // Build a content-tab webview builder carrying the same injection chain and
 // browser tuning as a normal single-webview Pake window, plus two tab-only
 // scripts: the tab's own label and the title/URL reporter.
-fn content_builder<'a>(
+fn content_builder(
     app: &AppHandle,
-    config: &'a PakeConfig,
+    config: &PakeConfig,
     tauri_config: &Config,
     label: &str,
     url: WebviewUrl,
@@ -286,6 +286,7 @@ fn spawn_tab(app: &AppHandle, url: String) -> tauri::Result<String> {
 
     show_only(app, &label);
     emit_state(app);
+    crate::app::session::request_save(app);
     Ok(label)
 }
 
@@ -344,7 +345,7 @@ pub fn setup_tabbed_window(
     app.manage(TabsState(Mutex::new(TabsModel::default())));
 
     // Chrome tab strip.
-    let (lw, lh) = window_logical_size(&window);
+    let (lw, _) = window_logical_size(&window);
     let chrome = WebviewBuilder::new(CHROME_LABEL, chrome_url())
         .initialization_script(include_str!("../inject/tabs_chrome.js"));
     window.add_child(
@@ -353,8 +354,46 @@ pub fn setup_tabbed_window(
         LogicalSize::new(lw.max(1.0), TAB_BAR_HEIGHT),
     )?;
 
-    // First tab.
-    spawn_tab(app, home_url(config))?;
+    // Restore the previous session when enabled and a valid one exists;
+    // otherwise fall back to the normal single home tab.
+    crate::app::session::init(app);
+    crate::app::bookmarks::init(app);
+    match crate::app::session::load_for_restore(app) {
+        Some(session) => {
+            crate::app::session::set_restoring(app, true);
+            let mut labels: Vec<String> = Vec::new();
+            for tab in &session.tabs {
+                // Skip (not fail) any individual tab that cannot be opened, so
+                // one bad entry never breaks the whole restore.
+                match spawn_tab(app, tab.url.clone()) {
+                    Ok(label) => labels.push(label),
+                    Err(e) => eprintln!("[Pake][session] skipped tab {}: {e}", tab.url),
+                }
+            }
+            if labels.is_empty() {
+                spawn_tab(app, home_url(config))?;
+            } else {
+                let active_label = labels
+                    .get(session.active.min(labels.len() - 1))
+                    .cloned()
+                    .unwrap_or_default();
+                {
+                    let state = app.state::<TabsState>();
+                    let mut model = state.0.lock().unwrap();
+                    model.active = active_label.clone();
+                }
+                show_only(app, &active_label);
+                emit_state(app);
+            }
+            // Restoration complete: resume normal persistence and snapshot the
+            // freshly restored state once.
+            crate::app::session::set_restoring(app, false);
+            crate::app::session::save_now(app);
+        }
+        None => {
+            spawn_tab(app, home_url(config))?;
+        }
+    }
 
     // Keep the layout in sync with window size.
     let resize_handle = app.clone();
@@ -399,6 +438,7 @@ pub async fn tab_switch(app: AppHandle, label: String) {
     }
     show_only(&app, &label);
     emit_state(&app);
+    crate::app::session::request_save(&app);
 }
 
 #[tauri::command]
@@ -431,13 +471,13 @@ pub async fn tab_close(app: AppHandle, label: String) {
         // Never leave the window with zero tabs — open a fresh home tab.
         let state = app.state::<MultiWindowState>();
         let home = home_url(&state.pake_config);
-        drop(state);
         let _ = spawn_tab(&app, home);
         return;
     }
 
     show_only(&app, &next_active);
     emit_state(&app);
+    crate::app::session::request_save(&app);
 }
 
 #[tauri::command]
@@ -455,4 +495,6 @@ pub fn tab_report(app: AppHandle, label: String, title: String, url: String) {
         }
     }
     emit_state(&app);
+    // A URL change (navigation) is a meaningful tab-state change worth saving.
+    crate::app::session::request_save(&app);
 }

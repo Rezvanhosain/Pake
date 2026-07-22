@@ -20,10 +20,15 @@ const WEBKIT_DISABLE_COMPOSITING_MODE: &str = "WEBKIT_DISABLE_COMPOSITING_MODE";
 const GDK_BACKEND: &str = "GDK_BACKEND";
 
 use app::{
+    bookmarks::{
+        bookmark_add, bookmark_is, bookmark_list, bookmark_remove, bookmark_remove_url,
+        bookmark_update,
+    },
     invoke::{
         clear_dock_badge, download_file, increment_dock_badge, send_notification, set_dock_badge,
         set_dock_badge_label, set_zoom, update_theme_mode,
     },
+    session::{session_get_restore, session_set_restore},
     setup::{set_global_shortcut, set_system_tray},
     tabs::{tab_close, tab_new, tab_ready, tab_report, tab_switch},
     window::{open_additional_window_safe, set_window, MultiWindowState},
@@ -196,6 +201,15 @@ pub fn run_app() {
                     tauri::http::Response::new(app::tabs::CHROME_HTML.as_bytes().to_vec())
                 })
         })
+        .register_uri_scheme_protocol(app::bookmarks::MANAGER_SCHEME, |_ctx, _request| {
+            tauri::http::Response::builder()
+                .header("Content-Type", "text/html")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(app::bookmarks::MANAGER_HTML.as_bytes().to_vec())
+                .unwrap_or_else(|_| {
+                    tauri::http::Response::new(app::bookmarks::MANAGER_HTML.as_bytes().to_vec())
+                })
+        })
         .invoke_handler(tauri::generate_handler![
             download_file,
             send_notification,
@@ -210,6 +224,14 @@ pub fn run_app() {
             tab_switch,
             tab_close,
             tab_report,
+            session_get_restore,
+            session_set_restore,
+            bookmark_list,
+            bookmark_is,
+            bookmark_add,
+            bookmark_remove,
+            bookmark_remove_url,
+            bookmark_update,
         ])
         .setup(move |app| {
             app.manage(MultiWindowState::new(
@@ -323,6 +345,12 @@ pub fn run_app() {
             std::process::exit(1);
         })
         .run(|_app, _event| {
+            // Persist the tab session synchronously on a normal shutdown, on top
+            // of the debounced saves that already run after each tab change.
+            if let tauri::RunEvent::ExitRequested { .. } = _event {
+                app::session::save_now(_app);
+            }
+
             // Handle macOS dock icon click to reopen hidden window
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {
