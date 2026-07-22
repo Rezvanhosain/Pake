@@ -85,7 +85,12 @@
     star.style.cssText = "margin-left:auto;" + btnBase;
     hoverable(star);
     function isBookmarkable(url) {
-      return /^(https?|file):/i.test(url || "");
+      const u = url || "";
+      // Pake's own pages resolve as http://<scheme>.localhost/ on Windows, so
+      // the host form has to be excluded as well as the custom scheme.
+      if (/^(paketabs|pakebookmarks):/i.test(u)) return false;
+      if (/(paketabs|pakebookmarks)\.localhost/i.test(u)) return false;
+      return /^(https?|file):/i.test(u);
     }
     function paintStar(on) {
       star.textContent = on ? "★" : "☆";

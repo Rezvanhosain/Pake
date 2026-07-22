@@ -48,8 +48,23 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
-// A bookmarkable/openable URL must parse and use a normal web scheme.
+// Pake's own pages (tab strip, bookmark manager). Their custom schemes resolve
+// as `http://<scheme>.localhost/` on Windows, so the host form has to be
+// excluded too or the manager can bookmark itself.
+fn is_internal_page(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    lower.starts_with("paketabs:")
+        || lower.starts_with("pakebookmarks:")
+        || lower.contains("paketabs.localhost")
+        || lower.contains("pakebookmarks.localhost")
+}
+
+// A bookmarkable/openable URL must parse, use a normal web scheme, and not be
+// one of Pake's own internal pages.
 pub fn is_valid_url(url: &str) -> bool {
+    if is_internal_page(url) {
+        return false;
+    }
     matches!(
         tauri::Url::parse(url.trim()).ok().map(|u| u.scheme().to_ascii_lowercase()),
         Some(scheme) if scheme == "http" || scheme == "https" || scheme == "file"
@@ -284,5 +299,15 @@ mod tests {
         assert!(!is_valid_url("pakebookmarks://localhost/"));
         assert!(!is_valid_url("not a url"));
         assert!(!is_valid_url(""));
+    }
+
+    #[test]
+    fn rejects_internal_pages_in_their_windows_host_form() {
+        // On Windows the custom schemes resolve as http://<scheme>.localhost/,
+        // which would otherwise pass the plain http/https check.
+        assert!(!is_valid_url("http://pakebookmarks.localhost/"));
+        assert!(!is_valid_url("http://paketabs.localhost/"));
+        assert!(!is_valid_url("HTTP://PakeBookmarks.localhost/"));
+        assert!(!is_valid_url("paketabs://localhost/"));
     }
 }
