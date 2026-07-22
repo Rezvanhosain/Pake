@@ -186,12 +186,14 @@ jobs:
             echo "::error::Generated config $CONFIG not found; cannot verify tabbed mode."
             exit 1
           fi
-          echo "----- $CONFIG (tabs value) -----"
-          grep -n '"tabs"' "$CONFIG" || true
-          echo "--------------------------------"
+          # Canonical location for the flag is windows[0].tabs
+          TABS_VALUE=$(node -e "const c=require('./src-tauri/.pake/pake.json');console.log(JSON.stringify(c.windows?.[0]?.tabs))")
+          echo "----- $CONFIG -----"
+          echo "windows[0].tabs = $TABS_VALUE"
+          echo "-------------------"
           if [ "${{ inputs.tabs }}" == "true" ]; then
-            if grep -Eq '"tabs"[[:space:]]*:[[:space:]]*true' "$CONFIG"; then
-              echo "Verified: generated config contains \"tabs\": true"
+            if [ "$TABS_VALUE" == "true" ]; then
+              echo "Verified: generated config contains windows[0].tabs = true"
             else
               echo "::error::Tabs were requested but generated config does not contain \"tabs\": true. Refusing to ship the single-window variant."
               exit 1
@@ -267,12 +269,14 @@ jobs:
             exit 1
           }
           $json = Get-Content $config -Raw | ConvertFrom-Json
-          Write-Host "----- $config (tabs value) -----"
-          Write-Host "tabs = $($json.tabs)"
-          Write-Host "--------------------------------"
+          # Canonical location for the flag is windows[0].tabs
+          $tabsValue = $json.windows[0].tabs
+          Write-Host "----- $config -----"
+          Write-Host "windows[0].tabs = $tabsValue"
+          Write-Host "-------------------"
           if ("${{ inputs.tabs }}" -eq "true") {
-            if ($json.tabs -eq $true) {
-              Write-Host "Verified: generated config contains `"tabs`": true"
+            if ($tabsValue -eq $true) {
+              Write-Host "Verified: generated config contains windows[0].tabs = true"
             } else {
               Write-Host "::error::Tabs were requested but generated config does not contain `"tabs`": true. Refusing to ship the single-window variant."
               exit 1
