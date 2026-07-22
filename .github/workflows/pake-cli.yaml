@@ -53,6 +53,11 @@ on:
         required: false
         type: boolean
         default: false
+      tabs:
+        description: "Enable browser tabs, session restore, and bookmarks"
+        required: false
+        type: boolean
+        default: true
       multi_arch:
         description: "Universal binary (macOS only)"
         required: false
@@ -146,6 +151,10 @@ jobs:
             ARGS+=("--hide-title-bar")
           fi
 
+          if [ "${{ inputs.tabs }}" == "true" ]; then
+            ARGS+=("--tabs")
+          fi
+
           if [ "${{ inputs.multi_arch }}" == "true" ]; then
             ARGS+=("--multi-arch")
           fi
@@ -159,8 +168,35 @@ jobs:
             ARGS+=("${EXTRA[@]}")
           fi
 
+          echo "===== Pake build configuration summary ====="
+          echo "URL:          ${{ inputs.url }}"
+          echo "App name:     ${{ inputs.name }}"
+          echo "Tabs enabled: ${{ inputs.tabs }} (browser tabs, session restore, bookmarks)"
           echo "Running: node dist/cli.js ${ARGS[@]}"
+          echo "============================================"
           node dist/cli.js "${ARGS[@]}"
+
+      - name: Verify tabbed mode in generated config (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          CONFIG="src-tauri/.pake/pake.json"
+          echo "Inspecting canonical config: $CONFIG"
+          if [ ! -f "$CONFIG" ]; then
+            echo "::error::Generated config $CONFIG not found; cannot verify tabbed mode."
+            exit 1
+          fi
+          echo "----- $CONFIG (tabs value) -----"
+          grep -n '"tabs"' "$CONFIG" || true
+          echo "--------------------------------"
+          if [ "${{ inputs.tabs }}" == "true" ]; then
+            if grep -Eq '"tabs"[[:space:]]*:[[:space:]]*true' "$CONFIG"; then
+              echo "Verified: generated config contains \"tabs\": true"
+            else
+              echo "::error::Tabs were requested but generated config does not contain \"tabs\": true. Refusing to ship the single-window variant."
+              exit 1
+            fi
+          fi
 
       - name: Build App (Windows)
         if: runner.os == 'Windows'
@@ -201,15 +237,47 @@ jobs:
             $args += "--hide-title-bar"
           }
 
+          if ("${{ inputs.tabs }}" -eq "true") {
+            $args += "--tabs"
+          }
+
           $extraArgs = "${{ inputs.extra_args }}"
           if ($extraArgs.Trim() -ne "") {
             $args += $extraArgs -split '\s+'
           }
 
+          Write-Host "===== Pake build configuration summary ====="
+          Write-Host "URL:          ${{ inputs.url }}"
+          Write-Host "App name:     ${{ inputs.name }}"
+          Write-Host "Tabs enabled: ${{ inputs.tabs }} (browser tabs, session restore, bookmarks)"
           Write-Host "Running: node dist/cli.js $($args -join ' ')"
+          Write-Host "============================================"
           node dist/cli.js $args
 
           git checkout -- src-tauri/Cargo.lock
+
+      - name: Verify tabbed mode in generated config (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $config = "src-tauri/.pake/pake.json"
+          Write-Host "Inspecting canonical config: $config"
+          if (-not (Test-Path $config)) {
+            Write-Host "::error::Generated config $config not found; cannot verify tabbed mode."
+            exit 1
+          }
+          $json = Get-Content $config -Raw | ConvertFrom-Json
+          Write-Host "----- $config (tabs value) -----"
+          Write-Host "tabs = $($json.tabs)"
+          Write-Host "--------------------------------"
+          if ("${{ inputs.tabs }}" -eq "true") {
+            if ($json.tabs -eq $true) {
+              Write-Host "Verified: generated config contains `"tabs`": true"
+            } else {
+              Write-Host "::error::Tabs were requested but generated config does not contain `"tabs`": true. Refusing to ship the single-window variant."
+              exit 1
+            }
+          }
 
       - name: Upload DMG (macOS)
         if: runner.os == 'macOS'
