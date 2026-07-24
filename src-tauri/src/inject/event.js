@@ -967,7 +967,24 @@ document.addEventListener("DOMContentLoaded", () => {
     copyAddress: isChinese ? "复制地址" : "Copy Address",
     openInBrowser: isChinese ? "浏览器打开" : "Open in Browser",
     openInNewTab: isChinese ? "在新标签页打开链接" : "Open link in new tab",
+    openVideoInNewTab: isChinese
+      ? "在新标签页打开视频"
+      : "Open video in new tab",
   };
+
+  // Only http(s) links may be opened as a new tab. Rejects javascript:, data:,
+  // blob:, mailto:, about: and Pake's internal schemes.
+  function isSafeNewTabUrl(url) {
+    return typeof url === "string" && /^https?:\/\//i.test(url.trim());
+  }
+
+  // Pick the "open in new tab" label based on whether the target link looks like
+  // a video (YouTube watch/shorts pages, youtu.be short links).
+  function newTabLabelFor(url) {
+    return /\/watch\?|\/shorts\/|youtu\.be\//i.test(url || "")
+      ? menuTexts.openVideoInNewTab
+      : menuTexts.openInNewTab;
+  }
 
   // Menu theme configuration
   const MENU_THEMES = {
@@ -1206,6 +1223,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     switch (type) {
       case "media":
+        // Tabbed mode: when the media (e.g. a YouTube thumbnail) sits inside a
+        // link, offer "Open video/link in new tab" first, opening the enclosing
+        // link's target -- otherwise the media menu would have no new-tab action.
+        if (window.pakeConfig?.tabs === true && isSafeNewTabUrl(data.linkUrl)) {
+          items.push(
+            createMenuItem(newTabLabelFor(data.linkUrl), () =>
+              window.pakeOpenInNewWindow(data.linkUrl),
+            ),
+          );
+        }
         const downloadText =
           data.type === "image"
             ? menuTexts.downloadImage
@@ -1222,10 +1249,11 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
 
       case "link":
-        // Tabbed mode: offer "Open link in new tab" as the first action.
-        if (window.pakeConfig?.tabs === true) {
+        // Tabbed mode: offer "Open link in new tab" as the first action, but
+        // only for real http(s) links (never javascript:/data:/etc.).
+        if (window.pakeConfig?.tabs === true && isSafeNewTabUrl(data.url)) {
           items.push(
-            createMenuItem(menuTexts.openInNewTab, () =>
+            createMenuItem(newTabLabelFor(data.url), () =>
               window.pakeOpenInNewWindow(data.url),
             ),
           );
@@ -1266,11 +1294,16 @@ document.addEventListener("DOMContentLoaded", () => {
       // Check for media elements (images/videos)
       const mediaInfo = getMediaInfo(target);
 
-      // Check for links (but not if it's media)
+      // Check for links. Also resolve the enclosing link when the target is
+      // media, so a linked thumbnail (YouTube video) can offer "open in new tab".
       const linkElement =
         target && typeof target.closest === "function"
           ? target.closest("a")
           : null;
+      const enclosingLinkUrl =
+        linkElement && isSafeNewTabUrl(linkElement.href)
+          ? linkElement.href
+          : "";
       const isLink = linkElement && linkElement.href && !mediaInfo.isMedia;
 
       // Only show custom menu for media or links
@@ -1281,7 +1314,10 @@ document.addEventListener("DOMContentLoaded", () => {
         let menuItems = [];
 
         if (mediaInfo.isMedia) {
-          menuItems = buildMenuItems("media", mediaInfo);
+          menuItems = buildMenuItems("media", {
+            ...mediaInfo,
+            linkUrl: enclosingLinkUrl,
+          });
         } else if (isLink) {
           const linkUrl = linkElement.href;
           menuItems = buildMenuItems("link", {

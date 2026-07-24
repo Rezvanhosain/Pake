@@ -35,6 +35,16 @@ use app::{
 };
 use util::get_pake_config;
 
+// Opt-in lifecycle tracing for diagnosing window close / exit / restore flow.
+// Gated behind the PAKE_DEBUG_LIFECYCLE env var so it is silent in normal use.
+macro_rules! lifecycle_log {
+    ($($arg:tt)*) => {
+        if std::env::var("PAKE_DEBUG_LIFECYCLE").is_ok() {
+            eprintln!("[Pake][lifecycle] {}", format!($($arg)*));
+        }
+    };
+}
+
 #[cfg(any(target_os = "linux", test))]
 fn is_disabled_env_value(value: &str) -> bool {
     matches!(
@@ -155,6 +165,10 @@ pub fn run_app() {
     let multi_instance = pake_config.multi_instance;
     let multi_window = pake_config.multi_window;
     let _enable_find = pake_config.windows[0].enable_find;
+    // Same-window tab mode owns its own shell window lifecycle. In this mode the
+    // window close control must actually exit the app (not hide to tray), so the
+    // session-restore-on-next-launch flow can run. See on_window_event below.
+    let tabs_mode = pake_config.windows[0].tabs;
 
     let window_state_plugin = WindowStatePlugin::default()
         .with_state_flags(if init_fullscreen {
@@ -180,6 +194,7 @@ pub fn run_app() {
     if !multi_instance {
         app_builder = app_builder.plugin(tauri_plugin_single_instance::init(
             move |app, _args, _cwd| {
+                lifecycle_log!("single-instance: second launch forwarded to running process");
                 if multi_window {
                     open_additional_window_safe(app);
                 } else if let Some(window) = app.get_window("pake") {
@@ -309,6 +324,21 @@ pub fn run_app() {
         })
         .on_window_event(move |_window, _event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                lifecycle_log!(
+                    "CloseRequested window={} tabs_mode={} hide_on_close={}",
+                    _window.label(),
+                    tabs_mode,
+                    hide_on_close
+                );
+                // In tabbed mode the shell window (label "pake") must actually
+                // close so the app exits and the next launch restores the saved
+                // session. Persist synchronously first, then allow the close to
+                // proceed (do NOT hide to tray / prevent_close).
+                if tabs_mode && _window.label() == "pake" {
+                    lifecycle_log!("tabbed shell closing -> saving session and exiting");
+                    app::session::save_now(_window.app_handle());
+                    return;
+                }
                 if hide_on_close && _window.label() == "pake" {
                     // Hide window when hide_on_close is enabled (regardless of tray status)
                     let window = _window.clone();
@@ -348,6 +378,7 @@ pub fn run_app() {
             // Persist the tab session synchronously on a normal shutdown, on top
             // of the debounced saves that already run after each tab change.
             if let tauri::RunEvent::ExitRequested { .. } = _event {
+                lifecycle_log!("ExitRequested -> save_now");
                 app::session::save_now(_app);
             }
 
